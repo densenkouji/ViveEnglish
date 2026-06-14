@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="Junior high 1 English basics">
+  <rect width="900" height="600" fill="#eef7f4"/>
+  <rect x="120" y="105" width="660" height="390" rx="28" fill="#fff" stroke="#e8dece" stroke-width="5"/>
+  <circle cx="210" cy="215" r="58" fill="#e07a5f" opacity="0.86"/>
+  <circle cx="450" cy="215" r="58" fill="#3d8b7d" opacity="0.86"/>
+  <circle cx="690" cy="215" r="58" fill="#e9b949" opacity="0.9"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#2d2a26">
+    <text x="210" y="230" font-size="36" font-weight="700">am</text>
+    <text x="450" y="230" font-size="36" font-weight="700">do</text>
+    <text x="690" y="230" font-size="36" font-weight="700">?</text>
+    <text x="450" y="350" font-size="42" font-weight="700">Junior High 1</text>
+    <text x="450" y="405" font-size="30">English Basics</text>
+  </g>
+</svg>

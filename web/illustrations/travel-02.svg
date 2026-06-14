@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400" role="img" aria-label="Asking for Directions">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9f0f7"/><stop offset="1" stop-color="#a9dcee"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="600" height="400" rx="24" fill="url(#bg)"/>
+  <circle cx="300" cy="170" r="138" fill="#ffffff" opacity="0.35"/>
+  
+        <g transform="translate(300,170)">
+          <g fill="#f7fbff" stroke="#9dc9ed" stroke-width="3">
+            <ellipse cx="-150" cy="-70" rx="42" ry="22"/><ellipse cx="-120" cy="-78" rx="28" ry="20"/>
+            <ellipse cx="150" cy="40" rx="46" ry="24"/><ellipse cx="118" cy="48" rx="30" ry="20"/>
+          </g>
+          <g transform="rotate(-18)">
+            <path d="M-130 0 L90 -16 Q130 -20 150 0 Q130 20 90 16 L-130 0 Z" fill="#f7fbff" stroke="#1d3b5b" stroke-width="4" stroke-linejoin="round"/>
+            <path d="M10 -10 L70 -64 L96 -60 L52 -6 Z" fill="#3fa3c4" stroke="#1d3b5b" stroke-width="4" stroke-linejoin="round"/>
+            <path d="M0 8 L48 52 L72 48 L36 4 Z" fill="#3fa3c4" stroke="#1d3b5b" stroke-width="4" stroke-linejoin="round"/>
+            <circle cx="-70" cy="0" r="7" fill="#9dc9ed"/><circle cx="-40" cy="-2" r="7" fill="#9dc9ed"/><circle cx="-10" cy="-4" r="7" fill="#9dc9ed"/>
+          </g>
+          <g transform="translate(150,-66)">
+            <path d="M0 -34 C20 -34 28 -18 28 -6 C28 12 0 34 0 34 C0 34 -28 12 -28 -6 C-28 -18 -20 -34 0 -34 Z" fill="#3fa3c4" stroke="#1d3b5b" stroke-width="4"/>
+            <circle cy="-8" r="9" fill="#f7fbff" stroke="#1d3b5b" stroke-width="3"/>
+          </g>
+        </g>
+  <!-- caption bar -->
+  <rect x="0" y="318" width="600" height="82" fill="#1d3b5b" opacity="0.92"/>
+  <text x="32" y="352" font-family="'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif" font-size="26" font-weight="700" fill="#ffffff">Asking for Directions</text>
+  <text x="32" y="380" font-family="'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif" font-size="17" fill="#cfe0f2">道をたずねる</text>
+  <!-- theme tag (width fits the label, right-aligned) -->
+  <g transform="translate(499,30)">
+    <rect x="0" y="-20" width="73" height="30" rx="15" fill="#ffffff" opacity="0.85"/>
+    <text x="36.5" y="0" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#3fa3c4">Travel</text>
+  </g>
+  <!-- placeholder note -->
+  <text x="300" y="300" text-anchor="middle" font-family="'Hiragino Kaku Gothic ProN',sans-serif" font-size="12" fill="#1d3b5b" opacity="0.5">差し替え用プレースホルダー / replace freely</text>
+</svg>

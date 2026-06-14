@@ -1,0 +1,31 @@
+{
+  "default": "watercolor_picturebook",
+  "note_ja": "挿絵のテイストは利用者ごとに好みが分かれるため、ここで選んだスタイルが全レッスンの挿絵プロンプトに一括で適用されます。プロフィール画面でいつでも切り替えられます。",
+  "shared_suffix": "single clear focal subject, friendly and welcoming mood, no text or letters in the image, no watermark, suitable for all ages",
+  "presets": {
+    "watercolor_picturebook": {
+      "name_ja": "やわらかい水彩・絵本風（デフォルト）",
+      "description_ja": "手描きの水彩で温かみのある絵本のようなテイスト。小学生から大人まで親しみやすい。",
+      "prompt_suffix": "Soft hand-painted watercolor illustration in the style of a gentle children's picture book, warm pastel palette, light paper texture, soft edges and visible brush strokes, cozy and inviting, single clear focal subject, no text or letters, no watermark, all-ages friendly",
+      "negative_prompt": "photorealistic, 3d render, harsh shadows, dark, scary, text, watermark, logo, low quality, extra fingers, deformed"
+    },
+    "flat_modern": {
+      "name_ja": "フラット・モダンなベクター",
+      "description_ja": "清潔感のあるアプリ風フラットイラスト。ビジネス寄りで洗練された印象。",
+      "prompt_suffix": "Clean modern flat vector illustration, simple geometric shapes, smooth gradients, limited cohesive color palette, minimalist app-style design, crisp and professional, single clear focal subject, no text or letters, no watermark",
+      "negative_prompt": "photorealistic, gritty texture, busy background, text, watermark, low quality, deformed"
+    },
+    "anime_manga": {
+      "name_ja": "アニメ・マンガ風",
+      "description_ja": "日本のアニメ調。線がはっきりした親しみやすいキャラクター表現で若年層に人気。",
+      "prompt_suffix": "Bright Japanese anime / manga style illustration, clean cel shading, expressive friendly characters, vivid but harmonious colors, soft background bokeh, single clear focal subject, no text or letters, no watermark, all-ages friendly",
+      "negative_prompt": "photorealistic, 3d render, dark, gore, text, watermark, low quality, extra fingers, deformed"
+    },
+    "warm_pencil": {
+      "name_ja": "やさしい色鉛筆スケッチ",
+      "description_ja": "色鉛筆で描いたような素朴で温かいスケッチ。手作り感があり落ち着いた雰囲気。",
+      "prompt_suffix": "Warm colored-pencil sketch illustration, gentle hand-drawn lines, soft crosshatching, muted cozy tones, storybook feel, single clear focal subject, no text or letters, no watermark, all-ages friendly",
+      "negative_prompt": "photorealistic, 3d render, neon, harsh contrast, text, watermark, low quality, deformed"
+    }
+  }
+}

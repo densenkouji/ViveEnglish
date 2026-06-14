@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="Wh question cards">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e6f2ef"/>
+      <stop offset="1" stop-color="#fff3df"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="600" fill="url(#bg)"/>
+  <rect x="120" y="110" width="660" height="380" rx="26" fill="#fff" stroke="#eadfce" stroke-width="5"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">
+    <rect x="170" y="170" width="145" height="95" rx="18" fill="#fff8ef" stroke="#e07a5f" stroke-width="5"/>
+    <text x="242" y="230" font-size="34" fill="#2d2a26">What?</text>
+    <rect x="380" y="170" width="145" height="95" rx="18" fill="#eff8f6" stroke="#3d8b7d" stroke-width="5"/>
+    <text x="452" y="230" font-size="34" fill="#2d2a26">Where?</text>
+    <rect x="585" y="170" width="145" height="95" rx="18" fill="#fffbea" stroke="#e9b949" stroke-width="5"/>
+    <text x="657" y="230" font-size="34" fill="#2d2a26">When?</text>
+    <rect x="270" y="315" width="145" height="95" rx="18" fill="#f4eef8" stroke="#9b7ac9" stroke-width="5"/>
+    <text x="342" y="375" font-size="34" fill="#2d2a26">Who?</text>
+    <rect x="485" y="315" width="145" height="95" rx="18" fill="#eef4fb" stroke="#5f8cc5" stroke-width="5"/>
+    <text x="557" y="375" font-size="34" fill="#2d2a26">How?</text>
+    <text x="450" y="455" font-size="32" fill="#5c564d">Wh-questions</text>
+  </g>
+</svg>

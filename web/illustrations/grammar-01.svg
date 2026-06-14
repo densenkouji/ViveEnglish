@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="Be verbs grammar cards">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff4df"/>
+      <stop offset="1" stop-color="#dcefe9"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="600" fill="url(#bg)"/>
+  <circle cx="160" cy="120" r="64" fill="#e9b949" opacity="0.25"/>
+  <circle cx="760" cy="470" r="88" fill="#3d8b7d" opacity="0.14"/>
+  <rect x="150" y="120" width="600" height="360" rx="24" fill="#ffffff" stroke="#eadfce" stroke-width="5"/>
+  <rect x="190" y="175" width="150" height="150" rx="18" fill="#fff8ef" stroke="#e07a5f" stroke-width="5"/>
+  <rect x="375" y="175" width="150" height="150" rx="18" fill="#f0f8f6" stroke="#3d8b7d" stroke-width="5"/>
+  <rect x="560" y="175" width="150" height="150" rx="18" fill="#fffbea" stroke="#e9b949" stroke-width="5"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#2d2a26">
+    <text x="265" y="242" font-size="42" font-weight="700">I</text>
+    <text x="265" y="290" font-size="34">am</text>
+    <text x="450" y="242" font-size="42" font-weight="700">You</text>
+    <text x="450" y="290" font-size="34">are</text>
+    <text x="635" y="242" font-size="42" font-weight="700">She</text>
+    <text x="635" y="290" font-size="34">is</text>
+    <text x="450" y="395" font-size="36" font-weight="700">be verbs</text>
+  </g>
+  <path d="M250 435 C330 405 415 435 500 414 C556 401 610 407 675 435" fill="none" stroke="#c75f44" stroke-width="8" stroke-linecap="round" opacity="0.45"/>
+</svg>

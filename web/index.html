@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ViveEnglish — 英語が、身近になる。</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" data-nav="home">
+      <span class="logo">V</span>
+      <div>
+        <div class="brand-name">ViveEnglish</div>
+        <div class="brand-tag">英語が、身近になる。</div>
+      </div>
+    </div>
+    <nav class="mainnav">
+      <button data-nav="home" class="navbtn">ホーム</button>
+      <button data-nav="lessons" class="navbtn">レッスン</button>
+      <button data-nav="progress" class="navbtn">進捗</button>
+      <button data-nav="profile" class="navbtn">設定</button>
+    </nav>
+    <div class="ai-status" id="aiStatus" title="AI接続状態">
+      <span class="dot"></span><span class="ai-label">AI</span>
+    </div>
+  </header>
+
+  <main id="app"><div class="loading">読み込み中…</div></main>
+
+  <!-- Word / phrase translation popover -->
+  <div id="glossPop" class="gloss-pop hidden">
+    <div class="gloss-head">
+      <span id="glossWord" class="gloss-word"></span>
+      <button id="glossClose" class="gloss-x" aria-label="閉じる">×</button>
+    </div>
+    <div id="glossBody" class="gloss-body">…</div>
+    <div class="gloss-actions">
+      <button id="glossSpeak" class="mini">🔊 発音</button>
+      <button id="glossSave" class="mini">★ 単語帳に保存</button>
+    </div>
+  </div>
+
+  <!-- Selection translate button -->
+  <button id="selXlate" class="sel-xlate hidden">この範囲を和訳</button>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- First-launch AI setup overlay -->
+  <div id="setup" class="setup-overlay hidden">
+    <div class="setup-card">
+      <div class="setup-logo">V</div>
+      <h2 id="setupTitle">AIの準備をしています</h2>
+      <p id="setupMsg" class="setup-msg">確認しています…</p>
+      <div class="setup-bar"><span id="setupFill"></span></div>
+      <div class="setup-pct"><span id="setupPct">0%</span><span id="setupDetail"></span></div>
+      <p class="setup-note">初回のみ、ローカルAIモデルをダウンロードします。完了後はオフラインで高速に動作します。</p>
+      <div class="setup-actions">
+        <button id="setupSkip" class="btn ghost sm">今はオフラインで使う</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

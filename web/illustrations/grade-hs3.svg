@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="High school 3 essay expressions">
+  <rect width="900" height="600" fill="#f3f0fa"/>
+  <rect x="150" y="90" width="600" height="420" rx="24" fill="#fff" stroke="#ddd4ee" stroke-width="5"/>
+  <line x1="220" y1="190" x2="680" y2="190" stroke="#e8dece" stroke-width="8" stroke-linecap="round"/>
+  <line x1="220" y1="270" x2="620" y2="270" stroke="#e8dece" stroke-width="8" stroke-linecap="round"/>
+  <line x1="220" y1="350" x2="650" y2="350" stroke="#e8dece" stroke-width="8" stroke-linecap="round"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#2d2a26">
+    <text x="450" y="155" font-size="34" font-weight="700">claim + evidence</text>
+    <text x="450" y="445" font-size="42" font-weight="700">High School 3</text>
+  </g>
+</svg>

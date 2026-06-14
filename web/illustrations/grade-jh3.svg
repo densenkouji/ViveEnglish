@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="Junior high 3 explanation grammar">
+  <rect width="900" height="600" fill="#edf3fb"/>
+  <rect x="135" y="100" width="630" height="400" rx="28" fill="#fff" stroke="#d9e2ee" stroke-width="5"/>
+  <rect x="205" y="175" width="170" height="110" rx="16" fill="#f8efe6" stroke="#e07a5f" stroke-width="5"/>
+  <rect x="365" y="245" width="170" height="110" rx="16" fill="#edf7f4" stroke="#3d8b7d" stroke-width="5"/>
+  <rect x="525" y="175" width="170" height="110" rx="16" fill="#fff9e7" stroke="#e9b949" stroke-width="5"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#2d2a26">
+    <text x="290" y="238" font-size="30" font-weight="700">have + pp</text>
+    <text x="450" y="308" font-size="30" font-weight="700">be + pp</text>
+    <text x="610" y="238" font-size="30" font-weight="700">who/that</text>
+    <text x="450" y="430" font-size="42" font-weight="700">Junior High 3</text>
+  </g>
+</svg>

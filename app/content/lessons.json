@@ -1,0 +1,1400 @@
+{
+  "lessons": [
+    {
+      "id": "school-01",
+      "theme": "School",
+      "theme_ja": "学校",
+      "level": "beginner",
+      "title_en": "Nice to Meet You",
+      "title_ja": "はじめまして（自己紹介）",
+      "est_minutes": 6,
+      "summary_ja": "新しいクラスで自分の名前や好きなことを伝える、いちばん基本の自己紹介。",
+      "illustration": {
+        "scene": "A cheerful elementary school classroom in spring, a smiling student standing by a desk introducing themselves to friendly classmates, bright window light, cherry blossoms outside",
+        "caption_ja": "春の教室で自己紹介をする場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "このレッスンのゴール：初対面のクラスメイトに、名前・出身・好きなことを英語で言えるようになること。まず本文を音読してみましょう。",
+      "vocab": [
+        {"en": "name", "ja": "名前", "example_en": "My name is Riku.", "example_ja": "私の名前はリクです。"},
+        {"en": "grade", "ja": "学年", "example_en": "I'm in the fifth grade.", "example_ja": "私は5年生です。"},
+        {"en": "favorite", "ja": "お気に入りの・大好きな", "example_en": "My favorite color is blue.", "example_ja": "私の好きな色は青です。"},
+        {"en": "hobby", "ja": "趣味", "example_en": "My hobby is drawing.", "example_ja": "私の趣味は絵を描くことです。"},
+        {"en": "meet", "ja": "会う", "example_en": "Nice to meet you.", "example_ja": "はじめまして。"},
+        {"en": "too", "ja": "～も（また）", "example_en": "Nice to meet you, too.", "example_ja": "こちらこそ、はじめまして。"}
+      ],
+      "dialogue": [
+        {"speaker": "Aoi", "text": "Hi! My name is Aoi. Nice to meet you.", "ja": "こんにちは！私の名前はアオイです。はじめまして。"},
+        {"speaker": "Sam", "text": "Hi, Aoi. I'm Sam. Nice to meet you, too.", "ja": "こんにちは、アオイ。僕はサムです。こちらこそはじめまして。"},
+        {"speaker": "Aoi", "text": "I'm in the fifth grade. How about you?", "ja": "私は5年生です。あなたは？"},
+        {"speaker": "Sam", "text": "Me too! What is your favorite subject?", "ja": "僕も！君の好きな教科は何？"},
+        {"speaker": "Aoi", "text": "My favorite subject is science. I like animals.", "ja": "私の好きな教科は理科です。動物が好きなんだ。"},
+        {"speaker": "Sam", "text": "Cool! Let's be friends.", "ja": "いいね！友達になろう。"}
+      ],
+      "phrases": [
+        {"en": "Nice to meet you.", "ja": "はじめまして。", "when_ja": "初対面のあいさつで最初に言う"},
+        {"en": "How about you?", "ja": "あなたはどう？", "when_ja": "同じ質問を相手に返すとき"},
+        {"en": "Let's be friends.", "ja": "友達になろう。", "when_ja": "親しくなりたいとき"}
+      ],
+      "roleplay": {
+        "scenario": "First day of school. The learner meets a new classmate named Vivi and introduces themselves.",
+        "scenario_ja": "新学期の初日。新しいクラスメイト『Vivi』と出会って自己紹介する。",
+        "opener": "Hi! I'm Vivi. What's your name?",
+        "opener_ja": "こんにちは！私はViviです。お名前は？"
+      },
+      "speaking_lines": [
+        "Hi, my name is Sam. Nice to meet you.",
+        "I'm in the fifth grade.",
+        "My favorite subject is science."
+      ],
+      "quiz": [
+        {"q_ja": "「はじめまして」と最初に言うときの表現は？", "type": "mc", "options": ["Nice to meet you.", "See you later.", "I'm fine."], "answer": 0, "explain_ja": "初対面のあいさつは Nice to meet you. が定番です。"},
+        {"q_ja": "相手に「あなたはどう？」と聞き返す表現は？", "type": "mc", "options": ["Thank you.", "How about you?", "Here you are."], "answer": 1, "explain_ja": "How about you? で質問を返せます。"},
+        {"q_ja": "「私は5年生です」を表す英文は？", "type": "mc", "options": ["I'm five years old.", "I'm in the fifth grade.", "I have five books."], "answer": 1, "explain_ja": "学年は in the ... grade で表します。"}
+      ]
+    },
+    {
+      "id": "school-02",
+      "theme": "School",
+      "theme_ja": "学校",
+      "level": "elementary",
+      "title_en": "Asking the Teacher",
+      "title_ja": "先生に質問する",
+      "est_minutes": 7,
+      "summary_ja": "授業中にわからないことを先生にていねいに質問するフレーズを学びます。",
+      "illustration": {
+        "scene": "A student raising their hand politely in a classroom, a kind teacher turning to listen, textbooks and a whiteboard with simple diagrams in the background, warm friendly atmosphere",
+        "caption_ja": "授業中に手を挙げて質問する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：わからないときに『質問してもいいですか？』『もう一度お願いします』を自然に言えるようになること。",
+      "vocab": [
+        {"en": "question", "ja": "質問", "example_en": "I have a question.", "example_ja": "質問があります。"},
+        {"en": "repeat", "ja": "繰り返す", "example_en": "Could you repeat that?", "example_ja": "もう一度言ってもらえますか？"},
+        {"en": "understand", "ja": "理解する", "example_en": "I don't understand this word.", "example_ja": "この単語がわかりません。"},
+        {"en": "mean", "ja": "意味する", "example_en": "What does this word mean?", "example_ja": "この単語はどういう意味ですか？"},
+        {"en": "slowly", "ja": "ゆっくりと", "example_en": "Please speak slowly.", "example_ja": "ゆっくり話してください。"},
+        {"en": "spell", "ja": "つづる", "example_en": "How do you spell it?", "example_ja": "どうつづりますか？"}
+      ],
+      "dialogue": [
+        {"speaker": "Mei", "text": "Excuse me, I have a question.", "ja": "すみません、質問があります。"},
+        {"speaker": "Teacher", "text": "Sure, Mei. Go ahead.", "ja": "もちろん、メイ。どうぞ。"},
+        {"speaker": "Mei", "text": "What does this word mean?", "ja": "この単語はどういう意味ですか？"},
+        {"speaker": "Teacher", "text": "It means 'a place to study'. Like a library.", "ja": "『勉強する場所』という意味です。図書館のようなね。"},
+        {"speaker": "Mei", "text": "Could you repeat that more slowly, please?", "ja": "もう少しゆっくり、もう一度お願いできますか？"},
+        {"speaker": "Teacher", "text": "Of course. A place... to study.", "ja": "もちろん。勉強する…場所、です。"}
+      ],
+      "phrases": [
+        {"en": "I have a question.", "ja": "質問があります。", "when_ja": "質問を切り出すとき"},
+        {"en": "What does ~ mean?", "ja": "～はどういう意味ですか？", "when_ja": "言葉の意味を聞くとき"},
+        {"en": "Could you repeat that, please?", "ja": "もう一度お願いできますか？", "when_ja": "聞き取れなかったとき"}
+      ],
+      "roleplay": {
+        "scenario": "In an English class. The learner does not understand a word and politely asks the teacher (Vivi) for help.",
+        "scenario_ja": "英語の授業中。わからない単語があり、先生役のViviにていねいに質問する。",
+        "opener": "Okay everyone, today's word is 'curious'. Any questions?",
+        "opener_ja": "さあみなさん、今日の単語は『curious』です。質問はありますか？"
+      },
+      "speaking_lines": [
+        "Excuse me, I have a question.",
+        "What does this word mean?",
+        "Could you repeat that more slowly, please?"
+      ],
+      "quiz": [
+        {"q_ja": "「もう一度お願いできますか？」に合う英文は？", "type": "mc", "options": ["Could you repeat that, please?", "You are welcome.", "I'm sorry I'm late."], "answer": 0, "explain_ja": "repeat（繰り返す）を使ったていねいな依頼表現です。"},
+        {"q_ja": "単語の意味を尋ねる表現は？", "type": "mc", "options": ["How are you?", "What does this word mean?", "Where is it?"], "answer": 1, "explain_ja": "mean は『意味する』。What does ~ mean? が定番です。"},
+        {"q_ja": "「ゆっくり話してください」の slowly の意味は？", "type": "mc", "options": ["大きく", "ゆっくり", "もう一度"], "answer": 1, "explain_ja": "slowly は『ゆっくりと』という副詞です。"}
+      ]
+    },
+    {
+      "id": "travel-01",
+      "theme": "Travel",
+      "theme_ja": "旅行",
+      "level": "elementary",
+      "title_en": "At the Airport",
+      "title_ja": "空港でのチェックイン",
+      "est_minutes": 8,
+      "summary_ja": "海外旅行の最初の関門、空港のチェックインカウンターでのやりとり。",
+      "illustration": {
+        "scene": "A traveler with a suitcase at an airport check-in counter, a friendly staff member behind the desk, departure boards and large windows with airplanes outside, bright and calm",
+        "caption_ja": "空港のチェックインカウンターの場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：チェックインで『窓側の席をお願いします』『荷物を預けたいです』が言えるようになること。",
+      "vocab": [
+        {"en": "passport", "ja": "パスポート", "example_en": "Here is my passport.", "example_ja": "これがパスポートです。"},
+        {"en": "window seat", "ja": "窓側の席", "example_en": "I'd like a window seat.", "example_ja": "窓側の席をお願いします。"},
+        {"en": "luggage", "ja": "手荷物・荷物", "example_en": "I have one piece of luggage.", "example_ja": "荷物が1つあります。"},
+        {"en": "check in", "ja": "チェックインする", "example_en": "I'd like to check in.", "example_ja": "チェックインしたいです。"},
+        {"en": "gate", "ja": "搭乗ゲート", "example_en": "Your gate is number 12.", "example_ja": "あなたのゲートは12番です。"},
+        {"en": "boarding", "ja": "搭乗（の）", "example_en": "Here is your boarding pass.", "example_ja": "こちらが搭乗券です。"}
+      ],
+      "dialogue": [
+        {"speaker": "Staff", "text": "Good morning. May I see your passport, please?", "ja": "おはようございます。パスポートを拝見できますか？"},
+        {"speaker": "Ken", "text": "Sure. Here you are. I'd like to check in.", "ja": "はい。どうぞ。チェックインしたいです。"},
+        {"speaker": "Staff", "text": "Thank you. Window or aisle seat?", "ja": "ありがとうございます。窓側と通路側、どちらにしますか？"},
+        {"speaker": "Ken", "text": "A window seat, please. I have one bag to check.", "ja": "窓側でお願いします。預ける荷物が1つあります。"},
+        {"speaker": "Staff", "text": "Okay. Your gate is number 12. Boarding is at 10:30.", "ja": "承知しました。ゲートは12番です。搭乗は10時30分です。"},
+        {"speaker": "Ken", "text": "Great, thank you very much.", "ja": "よかった、どうもありがとうございます。"}
+      ],
+      "phrases": [
+        {"en": "I'd like to check in.", "ja": "チェックインしたいです。", "when_ja": "カウンターで最初に言う"},
+        {"en": "A window seat, please.", "ja": "窓側の席をお願いします。", "when_ja": "座席を希望するとき"},
+        {"en": "Here you are.", "ja": "どうぞ（手渡すとき）。", "when_ja": "パスポートなどを渡すとき"}
+      ],
+      "roleplay": {
+        "scenario": "At an airport check-in counter abroad. Vivi is the airline staff. The learner checks in for a flight to London.",
+        "scenario_ja": "海外の空港チェックインカウンター。Viviは航空会社のスタッフ。ロンドン行きの便にチェックインする。",
+        "opener": "Good morning! Where are you flying today?",
+        "opener_ja": "おはようございます！本日はどちらへ向かわれますか？"
+      },
+      "speaking_lines": [
+        "Hello, I'd like to check in, please.",
+        "A window seat, please.",
+        "I have one bag to check."
+      ],
+      "quiz": [
+        {"q_ja": "「チェックインしたいです」に合う英文は？", "type": "mc", "options": ["I'd like to check in.", "I'd like to check out.", "I'm looking for the gate."], "answer": 0, "explain_ja": "check in は搭乗手続き。check out はホテルの退室です。"},
+        {"q_ja": "「窓側の席」を英語で言うと？", "type": "mc", "options": ["aisle seat", "window seat", "front seat"], "answer": 1, "explain_ja": "window seat が窓側、aisle seat が通路側です。"},
+        {"q_ja": "物を手渡しながら「どうぞ」と言う表現は？", "type": "mc", "options": ["Here you are.", "See you.", "No problem."], "answer": 0, "explain_ja": "Here you are. / Here you go. は手渡すときの定番です。"}
+      ]
+    },
+    {
+      "id": "travel-02",
+      "theme": "Travel",
+      "theme_ja": "旅行",
+      "level": "beginner",
+      "title_en": "Asking for Directions",
+      "title_ja": "道をたずねる",
+      "est_minutes": 7,
+      "summary_ja": "知らない街で目的地への行き方をたずね、道案内を理解するための表現。",
+      "illustration": {
+        "scene": "A tourist holding a paper map on a friendly city street corner, asking a smiling local for directions, signposts and shops in the background, sunny afternoon",
+        "caption_ja": "街角で地元の人に道をたずねる場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『～はどこですか？』とたずね、『まっすぐ行って左』などの案内を聞き取れるようになること。",
+      "vocab": [
+        {"en": "station", "ja": "駅", "example_en": "Where is the station?", "example_ja": "駅はどこですか？"},
+        {"en": "straight", "ja": "まっすぐに", "example_en": "Go straight.", "example_ja": "まっすぐ行ってください。"},
+        {"en": "turn", "ja": "曲がる", "example_en": "Turn left.", "example_ja": "左に曲がってください。"},
+        {"en": "corner", "ja": "角", "example_en": "It's on the corner.", "example_ja": "それは角にあります。"},
+        {"en": "near", "ja": "近くに", "example_en": "Is it near here?", "example_ja": "ここから近いですか？"},
+        {"en": "minute", "ja": "分", "example_en": "It's about five minutes away.", "example_ja": "5分ほどです。"}
+      ],
+      "dialogue": [
+        {"speaker": "Yuki", "text": "Excuse me, where is the train station?", "ja": "すみません、電車の駅はどこですか？"},
+        {"speaker": "Local", "text": "Go straight and turn left at the corner.", "ja": "まっすぐ行って、角を左に曲がってください。"},
+        {"speaker": "Yuki", "text": "Turn left at the corner. Is it near here?", "ja": "角を左ですね。ここから近いですか？"},
+        {"speaker": "Local", "text": "Yes, it's about five minutes away.", "ja": "ええ、5分ほどです。"},
+        {"speaker": "Yuki", "text": "Thank you so much for your help!", "ja": "助けてくれて本当にありがとうございます！"},
+        {"speaker": "Local", "text": "No problem. Have a nice trip!", "ja": "どういたしまして。良い旅を！"}
+      ],
+      "phrases": [
+        {"en": "Where is ~?", "ja": "～はどこですか？", "when_ja": "場所をたずねるとき"},
+        {"en": "Go straight and turn left/right.", "ja": "まっすぐ行って左/右に曲がる。", "when_ja": "道順を確認・復唱するとき"},
+        {"en": "Thank you for your help.", "ja": "助けてくれてありがとう。", "when_ja": "案内のお礼に"}
+      ],
+      "roleplay": {
+        "scenario": "The learner is lost in a foreign town and asks Vivi, a friendly local, how to get to the nearest station.",
+        "scenario_ja": "知らない街で道に迷い、地元の人Viviに最寄り駅への行き方をたずねる。",
+        "opener": "You look a little lost. Can I help you?",
+        "opener_ja": "少し迷っているようですね。お手伝いしましょうか？"
+      },
+      "speaking_lines": [
+        "Excuse me, where is the train station?",
+        "Go straight and turn left at the corner.",
+        "Thank you so much for your help."
+      ],
+      "quiz": [
+        {"q_ja": "「駅はどこですか？」に合う英文は？", "type": "mc", "options": ["Where is the station?", "When is the station?", "Who is the station?"], "answer": 0, "explain_ja": "場所をたずねるときは Where is ~? です。"},
+        {"q_ja": "「左に曲がる」は？", "type": "mc", "options": ["go straight", "turn left", "turn around"], "answer": 1, "explain_ja": "turn left=左折、turn right=右折、go straight=直進。"},
+        {"q_ja": "near の意味は？", "type": "mc", "options": ["遠くに", "近くに", "となりに座る"], "answer": 1, "explain_ja": "near は『近くに』という意味です。"}
+      ]
+    },
+    {
+      "id": "business-01",
+      "theme": "Business",
+      "theme_ja": "ビジネス",
+      "level": "intermediate",
+      "title_en": "Self-Introduction at Work",
+      "title_ja": "職場での自己紹介",
+      "est_minutes": 9,
+      "summary_ja": "入社初日やプロジェクト開始時に、役割と意気込みをプロらしく伝える自己紹介。",
+      "illustration": {
+        "scene": "A confident professional in business casual introducing themselves to a small diverse team in a bright modern office, handshake, laptops and a city view window, positive mood",
+        "caption_ja": "オフィスでチームに自己紹介する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：所属・担当・ひとことの意気込みを、丁寧で前向きな英語で言えるようになること。",
+      "vocab": [
+        {"en": "in charge of", "ja": "～を担当して", "example_en": "I'm in charge of marketing.", "example_ja": "私はマーケティングを担当しています。"},
+        {"en": "join", "ja": "加わる・入社する", "example_en": "I'm happy to join the team.", "example_ja": "チームに加われてうれしいです。"},
+        {"en": "colleague", "ja": "同僚", "example_en": "Nice to meet my new colleagues.", "example_ja": "新しい同僚に会えてうれしいです。"},
+        {"en": "look forward to", "ja": "～を楽しみにする", "example_en": "I look forward to working with you.", "example_ja": "一緒に働けるのを楽しみにしています。"},
+        {"en": "experience", "ja": "経験", "example_en": "I have five years of experience.", "example_ja": "5年の経験があります。"},
+        {"en": "responsible for", "ja": "～に責任を持つ", "example_en": "I'm responsible for sales.", "example_ja": "私は営業を担当しています。"}
+      ],
+      "dialogue": [
+        {"speaker": "Manager", "text": "Everyone, this is our new member. Please introduce yourself.", "ja": "みなさん、こちらが新しいメンバーです。自己紹介をお願いします。"},
+        {"speaker": "Hana", "text": "Hello, everyone. I'm Hana Sato. It's great to join the team.", "ja": "みなさん、こんにちは。佐藤ハナです。チームに加われてとても光栄です。"},
+        {"speaker": "Hana", "text": "I'll be in charge of the design team. I have five years of experience.", "ja": "私はデザインチームを担当します。5年の経験があります。"},
+        {"speaker": "Hana", "text": "I look forward to working with all of you.", "ja": "みなさんと一緒に働けるのを楽しみにしています。"},
+        {"speaker": "Colleague", "text": "Welcome, Hana! Let us know if you need anything.", "ja": "ようこそ、ハナさん！何か必要なら言ってくださいね。"},
+        {"speaker": "Hana", "text": "Thank you. That's very kind of you.", "ja": "ありがとうございます。ご親切に感謝します。"}
+      ],
+      "phrases": [
+        {"en": "It's great to join the team.", "ja": "チームに加われて光栄です。", "when_ja": "入社・参加のあいさつ"},
+        {"en": "I'm in charge of ~.", "ja": "～を担当します。", "when_ja": "役割を伝えるとき"},
+        {"en": "I look forward to working with you.", "ja": "一緒に働けるのを楽しみにしています。", "when_ja": "自己紹介の締めくくり"}
+      ],
+      "roleplay": {
+        "scenario": "The learner's first team meeting at a new job. Vivi is a senior colleague welcoming them and making small talk.",
+        "scenario_ja": "転職初日のチームミーティング。Viviは先輩社員で、歓迎しながら軽い雑談をする。",
+        "opener": "Welcome aboard! We're glad to have you. So, what will you be working on?",
+        "opener_ja": "ようこそ！来てくれてうれしいです。さて、どんな仕事を担当されますか？"
+      },
+      "speaking_lines": [
+        "Hello everyone, I'm happy to join the team.",
+        "I'll be in charge of the design team.",
+        "I look forward to working with all of you."
+      ],
+      "quiz": [
+        {"q_ja": "「マーケティングを担当します」に合う英文は？", "type": "mc", "options": ["I'm in charge of marketing.", "I'm afraid of marketing.", "I'm tired of marketing."], "answer": 0, "explain_ja": "in charge of ~ で『～を担当して』です。"},
+        {"q_ja": "look forward to の後ろに続く形は？", "type": "mc", "options": ["動詞の原形 (work)", "動名詞 (working)", "to + 原形 (to work)"], "answer": 1, "explain_ja": "look forward to の to は前置詞なので、動名詞 -ing が続きます。"},
+        {"q_ja": "colleague の意味は？", "type": "mc", "options": ["上司", "同僚", "顧客"], "answer": 1, "explain_ja": "colleague は『同僚』。上司は boss/manager です。"}
+      ]
+    },
+    {
+      "id": "business-02",
+      "theme": "Business",
+      "theme_ja": "ビジネス",
+      "level": "intermediate",
+      "title_en": "Speaking Up in a Meeting",
+      "title_ja": "会議で発言する",
+      "est_minutes": 10,
+      "summary_ja": "オンライン会議で意見を述べ、賛成・確認・提案をするための実践フレーズ。",
+      "illustration": {
+        "scene": "A person speaking up during a video conference call, laptop showing several remote colleagues, notes and coffee on the desk, focused but relaxed home office",
+        "caption_ja": "オンライン会議で発言する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：会議で『一点よろしいですか』『賛成です』『提案があります』を自然に切り出せるようになること。",
+      "vocab": [
+        {"en": "agenda", "ja": "議題", "example_en": "What's on the agenda today?", "example_ja": "今日の議題は何ですか？"},
+        {"en": "agree", "ja": "賛成する", "example_en": "I agree with your idea.", "example_ja": "あなたの考えに賛成です。"},
+        {"en": "suggest", "ja": "提案する", "example_en": "I'd like to suggest a plan.", "example_ja": "ひとつ計画を提案したいです。"},
+        {"en": "point", "ja": "点・要点", "example_en": "That's a good point.", "example_ja": "それは良い点ですね。"},
+        {"en": "make sure", "ja": "確認する", "example_en": "Let me make sure I understand.", "example_ja": "理解できているか確認させてください。"},
+        {"en": "deadline", "ja": "締め切り", "example_en": "What's the deadline?", "example_ja": "締め切りはいつですか？"}
+      ],
+      "dialogue": [
+        {"speaker": "Lead", "text": "Let's start. The first item on the agenda is the new schedule.", "ja": "始めましょう。最初の議題は新しいスケジュールです。"},
+        {"speaker": "Taro", "text": "Can I make one point? I think the deadline is too tight.", "ja": "一点よろしいですか？締め切りが少しきついと思います。"},
+        {"speaker": "Lead", "text": "That's a good point. What do you suggest?", "ja": "良い点ですね。どう提案しますか？"},
+        {"speaker": "Taro", "text": "I'd like to suggest moving it to next Friday.", "ja": "来週の金曜に動かすことを提案したいです。"},
+        {"speaker": "Lead", "text": "Sounds reasonable. Does everyone agree?", "ja": "妥当ですね。みなさん賛成ですか？"},
+        {"speaker": "Taro", "text": "Let me make sure: next Friday, the 20th. Correct?", "ja": "確認させてください。来週金曜の20日ですね？"}
+      ],
+      "phrases": [
+        {"en": "Can I make one point?", "ja": "一点よろしいですか？", "when_ja": "発言を切り出すとき"},
+        {"en": "I'd like to suggest ~.", "ja": "～を提案したいです。", "when_ja": "提案するとき"},
+        {"en": "Let me make sure I understand.", "ja": "理解を確認させてください。", "when_ja": "認識をそろえるとき"}
+      ],
+      "roleplay": {
+        "scenario": "A short project meeting. Vivi is the team lead asking for opinions on a tight deadline. The learner gives an opinion and a suggestion.",
+        "scenario_ja": "短いプロジェクト会議。Viviはリーダーで、きつい締め切りについて意見を求める。学習者は意見と提案を述べる。",
+        "opener": "Thanks for joining. I'm worried the deadline is too tight. What do you think?",
+        "opener_ja": "参加ありがとうございます。締め切りがきついのが心配です。どう思いますか？"
+      },
+      "speaking_lines": [
+        "Can I make one point?",
+        "I'd like to suggest moving the deadline to next Friday.",
+        "Let me make sure I understand the plan."
+      ],
+      "quiz": [
+        {"q_ja": "会議で発言を切り出す表現は？", "type": "mc", "options": ["Can I make one point?", "Can I go home?", "Can you hear the rain?"], "answer": 0, "explain_ja": "Can I make one point? で丁寧に発言を始められます。"},
+        {"q_ja": "agenda の意味は？", "type": "mc", "options": ["議題", "賛成", "締め切り"], "answer": 0, "explain_ja": "agenda は会議の『議題』です。"},
+        {"q_ja": "「提案したい」に合うのは？", "type": "mc", "options": ["I'd like to suggest ~", "I'd like to forget ~", "I'd like to leave ~"], "answer": 0, "explain_ja": "suggest は『提案する』です。"}
+      ]
+    },
+    {
+      "id": "food-01",
+      "theme": "Food",
+      "theme_ja": "食事",
+      "level": "elementary",
+      "title_en": "Ordering at a Restaurant",
+      "title_ja": "レストランで注文する",
+      "est_minutes": 8,
+      "summary_ja": "海外のレストランでメニューを選び、注文し、会計までを乗り切る表現。",
+      "illustration": {
+        "scene": "A friendly waiter taking an order from a happy customer at a cozy cafe table, menu in hand, warm lighting, plants and a chalkboard menu in the background",
+        "caption_ja": "カフェで注文する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『～をお願いします』『おすすめは？』『お会計お願いします』が言えるようになること。",
+      "vocab": [
+        {"en": "menu", "ja": "メニュー", "example_en": "Can I see the menu?", "example_ja": "メニューを見せてもらえますか？"},
+        {"en": "order", "ja": "注文する", "example_en": "Are you ready to order?", "example_ja": "ご注文はお決まりですか？"},
+        {"en": "recommend", "ja": "おすすめする", "example_en": "What do you recommend?", "example_ja": "おすすめは何ですか？"},
+        {"en": "I'll have", "ja": "～にします", "example_en": "I'll have the pasta.", "example_ja": "パスタにします。"},
+        {"en": "check", "ja": "お会計・伝票", "example_en": "Could I have the check, please?", "example_ja": "お会計をお願いできますか？"},
+        {"en": "delicious", "ja": "とてもおいしい", "example_en": "It was delicious.", "example_ja": "とてもおいしかったです。"}
+      ],
+      "dialogue": [
+        {"speaker": "Waiter", "text": "Hi! Are you ready to order?", "ja": "こんにちは！ご注文はお決まりですか？"},
+        {"speaker": "Emi", "text": "Almost. What do you recommend?", "ja": "もう少しです。おすすめは何ですか？"},
+        {"speaker": "Waiter", "text": "The tomato pasta is very popular today.", "ja": "本日はトマトパスタが大人気です。"},
+        {"speaker": "Emi", "text": "Great. I'll have the tomato pasta, please.", "ja": "いいですね。トマトパスタをお願いします。"},
+        {"speaker": "Waiter", "text": "Anything to drink?", "ja": "お飲み物はいかがですか？"},
+        {"speaker": "Emi", "text": "Just water, thank you. And could I have the check later?", "ja": "お水だけで、ありがとう。それと、あとでお会計をお願いできますか？"}
+      ],
+      "phrases": [
+        {"en": "What do you recommend?", "ja": "おすすめは何ですか？", "when_ja": "メニューを選ぶとき"},
+        {"en": "I'll have ~, please.", "ja": "～をお願いします。", "when_ja": "注文するとき"},
+        {"en": "Could I have the check, please?", "ja": "お会計をお願いできますか？", "when_ja": "支払いのとき"}
+      ],
+      "roleplay": {
+        "scenario": "At a cafe abroad. Vivi is the waiter. The learner looks at the menu, asks for a recommendation, and orders lunch.",
+        "scenario_ja": "海外のカフェ。Viviはウェイター。学習者はメニューを見て、おすすめを聞き、ランチを注文する。",
+        "opener": "Welcome! Here's the menu. Take your time. Can I get you something to drink first?",
+        "opener_ja": "いらっしゃいませ！こちらメニューです。ごゆっくり。まずお飲み物はいかがですか？"
+      },
+      "speaking_lines": [
+        "What do you recommend?",
+        "I'll have the tomato pasta, please.",
+        "Could I have the check, please?"
+      ],
+      "quiz": [
+        {"q_ja": "「おすすめは何ですか？」に合う英文は？", "type": "mc", "options": ["What do you recommend?", "What do you remember?", "What is your name?"], "answer": 0, "explain_ja": "recommend は『おすすめする』です。"},
+        {"q_ja": "注文するときの「～にします」は？", "type": "mc", "options": ["I'll have ~", "I'll wash ~", "I'll close ~"], "answer": 0, "explain_ja": "I'll have ~ が注文の定番表現です。"},
+        {"q_ja": "check（この場面）の意味は？", "type": "mc", "options": ["確認する", "お会計", "チェック柄"], "answer": 1, "explain_ja": "レストランでは check は『お会計・伝票』を指します。"}
+      ]
+    },
+    {
+      "id": "food-02",
+      "theme": "Food",
+      "theme_ja": "食事",
+      "level": "beginner",
+      "title_en": "My Favorite Food",
+      "title_ja": "好きな食べ物を話す",
+      "est_minutes": 6,
+      "summary_ja": "好きな食べ物とその理由を、身近な言葉で話せるようになります。",
+      "illustration": {
+        "scene": "Two friends happily talking over a table full of colorful favorite foods like sushi, ramen and fruit, casual and warm home kitchen setting",
+        "caption_ja": "好きな食べ物について話す場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『私は～が好きです』『なぜなら～』と、好みと理由をつなげて言えるようになること。",
+      "vocab": [
+        {"en": "favorite", "ja": "いちばん好きな", "example_en": "My favorite food is sushi.", "example_ja": "私のいちばん好きな食べ物は寿司です。"},
+        {"en": "delicious", "ja": "おいしい", "example_en": "Ramen is delicious.", "example_ja": "ラーメンはおいしいです。"},
+        {"en": "because", "ja": "なぜなら", "example_en": "I like it because it's sweet.", "example_ja": "甘いから好きです。"},
+        {"en": "sweet", "ja": "甘い", "example_en": "This cake is sweet.", "example_ja": "このケーキは甘いです。"},
+        {"en": "spicy", "ja": "辛い", "example_en": "I don't like spicy food.", "example_ja": "辛い食べ物は好きではありません。"},
+        {"en": "try", "ja": "試す・食べてみる", "example_en": "You should try it.", "example_ja": "食べてみるといいよ。"}
+      ],
+      "dialogue": [
+        {"speaker": "Leo", "text": "What's your favorite food?", "ja": "好きな食べ物は何？"},
+        {"speaker": "Nana", "text": "My favorite food is ramen. It's delicious.", "ja": "私のいちばん好きな食べ物はラーメン。おいしいんだ。"},
+        {"speaker": "Leo", "text": "Why do you like it?", "ja": "どうして好きなの？"},
+        {"speaker": "Nana", "text": "Because the soup is warm and tasty. How about you?", "ja": "スープが温かくておいしいから。あなたは？"},
+        {"speaker": "Leo", "text": "I like curry because it's a little spicy.", "ja": "僕はカレーが好き、ちょっと辛いからね。"},
+        {"speaker": "Nana", "text": "Sounds good. I want to try it!", "ja": "いいね。食べてみたい！"}
+      ],
+      "phrases": [
+        {"en": "My favorite food is ~.", "ja": "私のいちばん好きな食べ物は～です。", "when_ja": "好みを伝えるとき"},
+        {"en": "I like it because ~.", "ja": "～だから好きです。", "when_ja": "理由を添えるとき"},
+        {"en": "I want to try it.", "ja": "食べてみたいです。", "when_ja": "興味を示すとき"}
+      ],
+      "roleplay": {
+        "scenario": "Casual chat. Vivi asks the learner about their favorite foods and shares hers, asking follow-up questions.",
+        "scenario_ja": "気軽なおしゃべり。Viviが好きな食べ物をたずね、自分の好物も話しながら質問を続ける。",
+        "opener": "I'm so hungry! By the way, what's your favorite food?",
+        "opener_ja": "おなかすいた！ところで、あなたのいちばん好きな食べ物は何？"
+      },
+      "speaking_lines": [
+        "My favorite food is ramen.",
+        "I like it because the soup is warm and tasty.",
+        "I want to try it!"
+      ],
+      "quiz": [
+        {"q_ja": "「～だから好きです」と理由を言うときに使う語は？", "type": "mc", "options": ["because", "before", "between"], "answer": 0, "explain_ja": "because は『なぜなら』と理由を表します。"},
+        {"q_ja": "spicy の意味は？", "type": "mc", "options": ["甘い", "辛い", "冷たい"], "answer": 1, "explain_ja": "spicy は『辛い』、sweet は『甘い』です。"},
+        {"q_ja": "「食べてみたい」に合う英文は？", "type": "mc", "options": ["I want to try it.", "I want to buy it later.", "I want to go home."], "answer": 0, "explain_ja": "try は『試す・食べてみる』です。"}
+      ]
+    },
+    {
+      "id": "lifestyle-01",
+      "theme": "Lifestyle",
+      "theme_ja": "ライフスタイル",
+      "level": "beginner",
+      "title_en": "My Daily Routine",
+      "title_ja": "一日の流れを話す",
+      "est_minutes": 7,
+      "summary_ja": "起きてから寝るまでの一日の習慣を、時間表現とともに話します。",
+      "illustration": {
+        "scene": "A simple cheerful illustration showing a daily routine: waking up, breakfast, school or work, and relaxing in the evening, arranged like a friendly timeline, soft morning to night colors",
+        "caption_ja": "一日の流れを表す場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『私は7時に起きます』のように、習慣を現在形と時間表現で言えるようになること。",
+      "vocab": [
+        {"en": "get up", "ja": "起きる", "example_en": "I get up at seven.", "example_ja": "私は7時に起きます。"},
+        {"en": "breakfast", "ja": "朝食", "example_en": "I eat breakfast at home.", "example_ja": "家で朝食を食べます。"},
+        {"en": "usually", "ja": "たいてい", "example_en": "I usually walk to school.", "example_ja": "私はたいてい歩いて学校に行きます。"},
+        {"en": "after", "ja": "～のあとで", "example_en": "I study after dinner.", "example_ja": "夕食のあとに勉強します。"},
+        {"en": "go to bed", "ja": "寝る", "example_en": "I go to bed at ten.", "example_ja": "私は10時に寝ます。"},
+        {"en": "every day", "ja": "毎日", "example_en": "I read every day.", "example_ja": "私は毎日読書します。"}
+      ],
+      "dialogue": [
+        {"speaker": "Mia", "text": "What time do you get up?", "ja": "何時に起きるの？"},
+        {"speaker": "Ren", "text": "I usually get up at six thirty.", "ja": "たいてい6時半に起きるよ。"},
+        {"speaker": "Mia", "text": "Wow, that's early! What do you do after that?", "ja": "わあ、早いね！そのあとは何をするの？"},
+        {"speaker": "Ren", "text": "I eat breakfast and walk to school.", "ja": "朝食を食べて、歩いて学校に行くよ。"},
+        {"speaker": "Mia", "text": "And in the evening?", "ja": "夜は？"},
+        {"speaker": "Ren", "text": "I study after dinner and go to bed at ten.", "ja": "夕食のあとに勉強して、10時に寝るよ。"}
+      ],
+      "phrases": [
+        {"en": "I usually get up at ~.", "ja": "私はたいてい～時に起きます。", "when_ja": "起床時間を言うとき"},
+        {"en": "What do you do after that?", "ja": "そのあと何をしますか？", "when_ja": "次の行動をたずねるとき"},
+        {"en": "I go to bed at ~.", "ja": "私は～時に寝ます。", "when_ja": "就寝時間を言うとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi is curious about the learner's daily routine and asks about morning, afternoon, and evening habits.",
+        "scenario_ja": "Viviが学習者の一日の習慣に興味を持ち、朝・昼・夜の過ごし方をたずねる。",
+        "opener": "I'm trying to make a better daily routine. What does your typical day look like?",
+        "opener_ja": "良い生活リズムを作りたいんだ。あなたの普段の一日はどんな感じ？"
+      },
+      "speaking_lines": [
+        "I usually get up at six thirty.",
+        "I eat breakfast and walk to school.",
+        "I study after dinner and go to bed at ten."
+      ],
+      "quiz": [
+        {"q_ja": "「起きる」を表す表現は？", "type": "mc", "options": ["get up", "give up", "grow up"], "answer": 0, "explain_ja": "get up が『起きる』です。"},
+        {"q_ja": "usually の意味は？", "type": "mc", "options": ["決して", "たいてい", "急いで"], "answer": 1, "explain_ja": "usually は『たいてい・ふだん』という頻度を表します。"},
+        {"q_ja": "「夕食のあとで」に合うのは？", "type": "mc", "options": ["after dinner", "before breakfast", "during lunch"], "answer": 0, "explain_ja": "after は『～のあとで』です。"}
+      ]
+    },
+    {
+      "id": "lifestyle-02",
+      "theme": "Lifestyle",
+      "theme_ja": "ライフスタイル",
+      "level": "elementary",
+      "title_en": "Making Weekend Plans",
+      "title_ja": "週末の予定を立てる",
+      "est_minutes": 8,
+      "summary_ja": "友達を誘ったり、予定を提案・調整したりする会話表現を学びます。",
+      "illustration": {
+        "scene": "Two friends looking at a phone calendar together, smiling and pointing, planning a weekend outing, a park and sunny weather suggested in the background",
+        "caption_ja": "友達と週末の予定を立てる場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『～しない？』と誘い、『いいね』『ごめん、その日は無理』と返せるようになること。",
+      "vocab": [
+        {"en": "free", "ja": "ひま・空いている", "example_en": "Are you free on Saturday?", "example_ja": "土曜日は空いてる？"},
+        {"en": "How about", "ja": "～はどう？", "example_en": "How about Sunday?", "example_ja": "日曜日はどう？"},
+        {"en": "Let's", "ja": "～しよう", "example_en": "Let's go to the movies.", "example_ja": "映画に行こう。"},
+        {"en": "sounds good", "ja": "いいね", "example_en": "That sounds good!", "example_ja": "それいいね！"},
+        {"en": "busy", "ja": "忙しい", "example_en": "I'm busy on Saturday.", "example_ja": "土曜日は忙しいんだ。"},
+        {"en": "meet up", "ja": "待ち合わせる", "example_en": "Let's meet up at noon.", "example_ja": "正午に待ち合わせよう。"}
+      ],
+      "dialogue": [
+        {"speaker": "Kai", "text": "Are you free this weekend?", "ja": "今週末は空いてる？"},
+        {"speaker": "Sara", "text": "I'm busy on Saturday, but Sunday is fine.", "ja": "土曜は忙しいけど、日曜は大丈夫だよ。"},
+        {"speaker": "Kai", "text": "Great. Let's go to the movies on Sunday.", "ja": "いいね。日曜に映画に行こう。"},
+        {"speaker": "Sara", "text": "Sounds good! What time should we meet up?", "ja": "いいね！何時に待ち合わせる？"},
+        {"speaker": "Kai", "text": "How about noon in front of the station?", "ja": "正午に駅前はどう？"},
+        {"speaker": "Sara", "text": "Perfect. See you then!", "ja": "完璧。じゃあそのときに！"}
+      ],
+      "phrases": [
+        {"en": "Are you free ~?", "ja": "～は空いてる？", "when_ja": "予定を確認するとき"},
+        {"en": "Let's ~.", "ja": "～しよう。", "when_ja": "誘うとき"},
+        {"en": "That sounds good!", "ja": "それいいね！", "when_ja": "提案に賛成するとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi wants to hang out this weekend. The learner checks their schedule and they decide what to do and when to meet.",
+        "scenario_ja": "Viviが週末に遊びたい。学習者は予定を確認し、何をするか・いつ会うかを決める。",
+        "opener": "Hey! Are you free this weekend? I want to do something fun.",
+        "opener_ja": "ねえ！今週末空いてる？何か楽しいことしたいな。"
+      },
+      "speaking_lines": [
+        "Are you free this weekend?",
+        "Let's go to the movies on Sunday.",
+        "How about noon in front of the station?"
+      ],
+      "quiz": [
+        {"q_ja": "「土曜日は空いてる？」に合う英文は？", "type": "mc", "options": ["Are you free on Saturday?", "Are you fast on Saturday?", "Are you full on Saturday?"], "answer": 0, "explain_ja": "free は『ひま・空いている』。Are you free ~? が定番です。"},
+        {"q_ja": "「～しよう」と誘う表現は？", "type": "mc", "options": ["Let's ~", "Lost ~", "Less ~"], "answer": 0, "explain_ja": "Let's + 動詞の原形 で『～しよう』です。"},
+        {"q_ja": "meet up の意味は？", "type": "mc", "options": ["別れる", "待ち合わせる", "見上げる"], "answer": 1, "explain_ja": "meet up は『（人と）会う・待ち合わせる』です。"}
+      ]
+    },
+    {
+      "id": "culture-01",
+      "theme": "Japanese Culture",
+      "theme_ja": "日本文化",
+      "level": "intermediate",
+      "title_en": "Explaining Japanese New Year",
+      "title_ja": "お正月を説明する",
+      "est_minutes": 10,
+      "summary_ja": "外国の友人に日本のお正月（おせち・初詣・お年玉）を英語で紹介します。",
+      "illustration": {
+        "scene": "A warm scene of a Japanese New Year: a family in casual kimono around a table with osechi boxes, a small shrine visit in the background, soft festive winter atmosphere",
+        "caption_ja": "日本のお正月を紹介する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：日本の文化を『～します』『～と呼ばれます』と説明し、簡単な理由も添えられるようになること。",
+      "vocab": [
+        {"en": "celebrate", "ja": "祝う", "example_en": "We celebrate the New Year.", "example_ja": "私たちは新年を祝います。"},
+        {"en": "tradition", "ja": "伝統", "example_en": "It's an old tradition.", "example_ja": "それは古い伝統です。"},
+        {"en": "is called", "ja": "～と呼ばれる", "example_en": "This food is called osechi.", "example_ja": "この料理はおせちと呼ばれます。"},
+        {"en": "visit", "ja": "訪れる", "example_en": "We visit a shrine.", "example_ja": "私たちは神社を訪れます。"},
+        {"en": "lucky", "ja": "幸運な", "example_en": "It brings good luck.", "example_ja": "それは幸運をもたらします。"},
+        {"en": "relatives", "ja": "親戚", "example_en": "We meet our relatives.", "example_ja": "私たちは親戚と会います。"}
+      ],
+      "dialogue": [
+        {"speaker": "Olivia", "text": "How do Japanese people celebrate the New Year?", "ja": "日本の人たちはどうやって新年を祝うの？"},
+        {"speaker": "Sota", "text": "We eat special food. It's called osechi.", "ja": "特別な料理を食べるよ。おせちと呼ばれているんだ。"},
+        {"speaker": "Olivia", "text": "Interesting! What else do you do?", "ja": "面白い！ほかには何をするの？"},
+        {"speaker": "Sota", "text": "We visit a shrine. This tradition is called hatsumode.", "ja": "神社を訪れるよ。この伝統は初詣と呼ばれているんだ。"},
+        {"speaker": "Olivia", "text": "Why do you visit a shrine?", "ja": "どうして神社に行くの？"},
+        {"speaker": "Sota", "text": "We pray for good luck and health for the year.", "ja": "その年の幸運と健康を祈るためだよ。"}
+      ],
+      "phrases": [
+        {"en": "It's called ~.", "ja": "それは～と呼ばれます。", "when_ja": "日本語の名前を紹介するとき"},
+        {"en": "This tradition is ~.", "ja": "この伝統は～です。", "when_ja": "習慣を説明するとき"},
+        {"en": "We pray for good luck.", "ja": "幸運を祈ります。", "when_ja": "理由・目的を説明するとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi is a curious foreign friend who asks the learner to explain how Japanese people spend New Year's holidays.",
+        "scenario_ja": "Viviは好奇心旺盛な外国人の友人。日本のお正月の過ごし方を説明してほしいと頼む。",
+        "opener": "I heard Japanese New Year is special. Can you tell me what you usually do?",
+        "opener_ja": "日本のお正月は特別だって聞いたよ。普段どんなことをするのか教えてくれる？"
+      },
+      "speaking_lines": [
+        "We eat special food. It's called osechi.",
+        "We visit a shrine. This tradition is called hatsumode.",
+        "We pray for good luck and health for the year."
+      ],
+      "quiz": [
+        {"q_ja": "「～と呼ばれます」に合う表現は？", "type": "mc", "options": ["It's called ~", "It's calling ~", "It's calm ~"], "answer": 0, "explain_ja": "受け身 be called ~ で『～と呼ばれる』です。"},
+        {"q_ja": "celebrate の意味は？", "type": "mc", "options": ["祝う", "掃除する", "中止する"], "answer": 0, "explain_ja": "celebrate は『祝う』です。"},
+        {"q_ja": "relatives の意味は？", "type": "mc", "options": ["相対する", "親戚", "信頼できる"], "answer": 1, "explain_ja": "relatives は『親戚』です。"}
+      ]
+    },
+    {
+      "id": "culture-02",
+      "theme": "Japanese Culture",
+      "theme_ja": "日本文化",
+      "level": "intermediate",
+      "title_en": "A Visit to a Shrine",
+      "title_ja": "神社への案内",
+      "est_minutes": 9,
+      "summary_ja": "外国人の友人を神社に案内し、お参りの作法をやさしく説明します。",
+      "illustration": {
+        "scene": "A person gently guiding a foreign friend at a peaceful Japanese shrine, showing how to wash hands at the water basin, torii gate and green trees, calm respectful mood",
+        "caption_ja": "神社で参拝の作法を案内する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：『まず～します、それから～します』と手順を順番に説明できるようになること。",
+      "vocab": [
+        {"en": "shrine", "ja": "神社", "example_en": "This is a famous shrine.", "example_ja": "ここは有名な神社です。"},
+        {"en": "bow", "ja": "おじぎする", "example_en": "First, we bow once.", "example_ja": "まず一度おじぎします。"},
+        {"en": "wash", "ja": "洗う", "example_en": "We wash our hands here.", "example_ja": "ここで手を洗います。"},
+        {"en": "pray", "ja": "祈る", "example_en": "Then we pray quietly.", "example_ja": "それから静かに祈ります。"},
+        {"en": "coin", "ja": "硬貨", "example_en": "We throw a coin into the box.", "example_ja": "箱に硬貨を入れます。"},
+        {"en": "step", "ja": "手順・段階", "example_en": "There are a few steps.", "example_ja": "いくつか手順があります。"}
+      ],
+      "dialogue": [
+        {"speaker": "Ben", "text": "Wow, this shrine is beautiful. What should I do first?", "ja": "わあ、この神社きれいだね。最初に何をすればいい？"},
+        {"speaker": "Yui", "text": "First, we wash our hands at this water basin.", "ja": "まず、この手水舎で手を洗うよ。"},
+        {"speaker": "Ben", "text": "Okay, I washed my hands. What's next?", "ja": "わかった、手を洗ったよ。次は？"},
+        {"speaker": "Yui", "text": "Next, throw a coin into the box and bow twice.", "ja": "次に、箱に硬貨を入れて、二回おじぎするんだ。"},
+        {"speaker": "Ben", "text": "And then?", "ja": "それから？"},
+        {"speaker": "Yui", "text": "Then clap twice, pray quietly, and bow once more.", "ja": "それから二回手をたたいて、静かに祈り、もう一度おじぎするよ。"}
+      ],
+      "phrases": [
+        {"en": "First, we ~.", "ja": "まず、～します。", "when_ja": "最初の手順を説明するとき"},
+        {"en": "Next / Then ~.", "ja": "次に / それから～。", "when_ja": "手順を順番に並べるとき"},
+        {"en": "What should I do first?", "ja": "最初に何をすればいい？", "when_ja": "やり方をたずねるとき"}
+      ],
+      "roleplay": {
+        "scenario": "The learner takes Vivi, a foreign visitor, to a shrine and explains the steps of praying politely, one step at a time.",
+        "scenario_ja": "学習者が外国人観光客のViviを神社に案内し、お参りの手順を一つずつ丁寧に説明する。",
+        "opener": "This place is so peaceful! I've never been to a shrine. What should I do first?",
+        "opener_ja": "ここすごく静かだね！神社に来たのは初めて。最初に何をすればいい？"
+      },
+      "speaking_lines": [
+        "First, we wash our hands at this water basin.",
+        "Next, throw a coin into the box and bow twice.",
+        "Then clap twice, pray quietly, and bow once more."
+      ],
+      "quiz": [
+        {"q_ja": "手順の最初を表すのは？", "type": "mc", "options": ["First", "Finally", "Fast"], "answer": 0, "explain_ja": "First（まず）→ Next/Then（次に）→ Finally（最後に）と並べます。"},
+        {"q_ja": "bow の意味は？", "type": "mc", "options": ["走る", "おじぎする", "数える"], "answer": 1, "explain_ja": "bow は『おじぎする』です。"},
+        {"q_ja": "「次に何をすればいい？」に合うのは？", "type": "mc", "options": ["What's next?", "What's wrong?", "What's that?"], "answer": 0, "explain_ja": "What's next? で『次は何？』と聞けます。"}
+      ]
+    },
+    {
+      "id": "grammar-01",
+      "theme": "Grammar Basics",
+      "theme_ja": "基礎文法",
+      "level": "beginner",
+      "title_en": "Be Verbs: am / are / is",
+      "title_ja": "be動詞の基本",
+      "est_minutes": 8,
+      "summary_ja": "I am / You are / He is の形を使って、人やものを説明する基礎文法を練習します。",
+      "illustration": {
+        "scene": "A friendly study desk with grammar cards showing I am, You are, and She is, a notebook and pencils, warm clear classroom lighting, simple flat learning illustration",
+        "caption_ja": "be動詞のカードで基本文を学ぶ場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：主語に合わせて am / are / is を選び、肯定文・否定文・疑問文を作れるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "主語によってbe動詞が変わる",
+          "pattern": "I am / You are / He is / She is / It is",
+          "explanation_ja": "be動詞は『です・います・あります』のように、人やものの状態を説明します。",
+          "examples": ["I am a student.", "You are kind.", "She is my friend."]
+        },
+        {
+          "title_ja": "否定文は not を入れる",
+          "pattern": "主語 + be動詞 + not + ...",
+          "explanation_ja": "『～ではありません』と言うときは be動詞のあとに not を置きます。",
+          "examples": ["I am not tired.", "He is not a teacher.", "They are not busy."]
+        },
+        {
+          "title_ja": "疑問文はbe動詞を前に出す",
+          "pattern": "Be動詞 + 主語 + ...?",
+          "explanation_ja": "『～ですか？』と聞くときは am / are / is を文の最初に置きます。",
+          "examples": ["Are you ready?", "Is this your book?", "Am I late?"]
+        }
+      ],
+      "vocab": [
+        {"en": "am", "ja": "I と使う be動詞", "example_en": "I am happy.", "example_ja": "私はうれしいです。"},
+        {"en": "are", "ja": "you / we / they と使う be動詞", "example_en": "You are kind.", "example_ja": "あなたは親切です。"},
+        {"en": "is", "ja": "he / she / it と使う be動詞", "example_en": "She is a student.", "example_ja": "彼女は生徒です。"},
+        {"en": "not", "ja": "～ではない", "example_en": "I am not tired.", "example_ja": "私は疲れていません。"},
+        {"en": "student", "ja": "生徒", "example_en": "He is a student.", "example_ja": "彼は生徒です。"},
+        {"en": "ready", "ja": "準備ができている", "example_en": "Are you ready?", "example_ja": "準備はできていますか？"}
+      ],
+      "dialogue": [
+        {"speaker": "Vivi", "text": "I am Vivi. Are you a student?", "ja": "私はViviです。あなたは生徒ですか？"},
+        {"speaker": "Learner", "text": "Yes, I am. I am a student.", "ja": "はい、そうです。私は生徒です。"},
+        {"speaker": "Vivi", "text": "Good. Is Theo your teacher?", "ja": "いいですね。Theoはあなたの先生ですか？"},
+        {"speaker": "Learner", "text": "No, he is not. He is my friend.", "ja": "いいえ、違います。彼は私の友達です。"},
+        {"speaker": "Vivi", "text": "Nice! Are you ready for the quiz?", "ja": "いいね！クイズの準備はできていますか？"},
+        {"speaker": "Learner", "text": "Yes, I am ready.", "ja": "はい、準備できています。"}
+      ],
+      "phrases": [
+        {"en": "I am ~.", "ja": "私は～です。", "when_ja": "自分について説明するとき"},
+        {"en": "Are you ~?", "ja": "あなたは～ですか？", "when_ja": "相手についてたずねるとき"},
+        {"en": "He is not ~.", "ja": "彼は～ではありません。", "when_ja": "否定して説明するとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi helps the learner practice be verbs with short personal questions.",
+        "scenario_ja": "Viviが短い質問を出し、学習者は be動詞を使って答える。",
+        "opener": "Let's practice be verbs. Are you ready?",
+        "opener_ja": "be動詞を練習しましょう。準備はできていますか？"
+      },
+      "speaking_lines": [
+        "I am a student.",
+        "He is not my teacher.",
+        "Are you ready?"
+      ],
+      "quiz": [
+        {"q_ja": "空所に入る語は？ I ___ happy.", "type": "mc", "options": ["am", "are", "is"], "answer": 0, "explain_ja": "主語が I のときは am を使います。"},
+        {"q_ja": "空所に入る語は？ You ___ kind.", "type": "mc", "options": ["am", "are", "is"], "answer": 1, "explain_ja": "主語が you のときは are を使います。"},
+        {"q_ja": "空所に入る語は？ She ___ a student.", "type": "mc", "options": ["am", "are", "is"], "answer": 2, "explain_ja": "主語が she のときは is を使います。"},
+        {"q_ja": "否定文として正しいものは？", "type": "mc", "options": ["I not am tired.", "I am not tired.", "Not I am tired."], "answer": 1, "explain_ja": "not は be動詞のあとに置きます。"},
+        {"q_ja": "疑問文として正しいものは？", "type": "mc", "options": ["Are you ready?", "You are ready?", "Ready are you?"], "answer": 0, "explain_ja": "疑問文では be動詞を主語の前に出します。"},
+        {"q_ja": "He is not a teacher. の意味は？", "type": "mc", "options": ["彼は先生です。", "彼は先生ではありません。", "彼は先生ですか？"], "answer": 1, "explain_ja": "is not は『～ではありません』です。"}
+      ]
+    },
+    {
+      "id": "grammar-02",
+      "theme": "Grammar Basics",
+      "theme_ja": "基礎文法",
+      "level": "beginner",
+      "title_en": "Present Simple",
+      "title_ja": "一般動詞の現在形",
+      "est_minutes": 9,
+      "summary_ja": "like / play / study などを使い、習慣や好きなことを現在形で言う練習をします。",
+      "illustration": {
+        "scene": "A simple weekly habit chart with icons for study, play, read, and eat, a learner writing short English sentences in a notebook, bright friendly educational style",
+        "caption_ja": "習慣を現在形で書く練習の場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：I play / He plays の違いと、Do you...? / Does she...? の質問の形を理解すること。",
+      "grammar_points": [
+        {
+          "title_ja": "I / You / We / They は動詞をそのまま使う",
+          "pattern": "I like music. / They play soccer.",
+          "explanation_ja": "現在形は、ふだんすること・好きなこと・事実を表します。",
+          "examples": ["I study English.", "We eat breakfast at seven.", "They play tennis."]
+        },
+        {
+          "title_ja": "He / She / It は動詞に s をつける",
+          "pattern": "He likes music. / She plays soccer.",
+          "explanation_ja": "主語が he / she / it など一人・一つのとき、現在形の動詞に s がつきます。",
+          "examples": ["He studies English.", "She likes tea.", "It looks nice."]
+        },
+        {
+          "title_ja": "質問は Do / Does を使う",
+          "pattern": "Do you like ...? / Does he like ...?",
+          "explanation_ja": "Does を使う質問では、後ろの動詞は s をつけず原形に戻します。",
+          "examples": ["Do you play soccer?", "Does she study English?", "Does he like music?"]
+        }
+      ],
+      "vocab": [
+        {"en": "like", "ja": "好きである", "example_en": "I like music.", "example_ja": "私は音楽が好きです。"},
+        {"en": "play", "ja": "遊ぶ・競技をする", "example_en": "They play soccer.", "example_ja": "彼らはサッカーをします。"},
+        {"en": "study", "ja": "勉強する", "example_en": "She studies English.", "example_ja": "彼女は英語を勉強します。"},
+        {"en": "read", "ja": "読む", "example_en": "He reads books.", "example_ja": "彼は本を読みます。"},
+        {"en": "every day", "ja": "毎日", "example_en": "I read every day.", "example_ja": "私は毎日読みます。"},
+        {"en": "usually", "ja": "たいてい", "example_en": "We usually eat at home.", "example_ja": "私たちはたいてい家で食べます。"}
+      ],
+      "dialogue": [
+        {"speaker": "Theo", "text": "Do you study English every day?", "ja": "あなたは毎日英語を勉強しますか？"},
+        {"speaker": "Learner", "text": "Yes, I study English every day.", "ja": "はい、私は毎日英語を勉強します。"},
+        {"speaker": "Theo", "text": "Does your friend study English too?", "ja": "あなたの友達も英語を勉強しますか？"},
+        {"speaker": "Learner", "text": "Yes, she studies English too.", "ja": "はい、彼女も英語を勉強します。"},
+        {"speaker": "Theo", "text": "What sports do you play?", "ja": "あなたはどんなスポーツをしますか？"},
+        {"speaker": "Learner", "text": "I play tennis. My brother plays soccer.", "ja": "私はテニスをします。弟はサッカーをします。"}
+      ],
+      "phrases": [
+        {"en": "I study English every day.", "ja": "私は毎日英語を勉強します。", "when_ja": "習慣を言うとき"},
+        {"en": "She studies English too.", "ja": "彼女も英語を勉強します。", "when_ja": "三人称単数の習慣を言うとき"},
+        {"en": "Do you like ~?", "ja": "～は好きですか？", "when_ja": "相手の好みをたずねるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Theo asks about the learner's daily habits and hobbies, using present simple questions.",
+        "scenario_ja": "Theoが現在形の質問で、学習者の習慣や趣味をたずねる。",
+        "opener": "Let's talk about habits. What do you do every day?",
+        "opener_ja": "習慣について話しましょう。あなたは毎日何をしますか？"
+      },
+      "speaking_lines": [
+        "I study English every day.",
+        "She studies English too.",
+        "Do you like music?"
+      ],
+      "quiz": [
+        {"q_ja": "空所に入る語は？ I ___ tennis.", "type": "mc", "options": ["play", "plays", "playing"], "answer": 0, "explain_ja": "主語が I の現在形は動詞の原形 play を使います。"},
+        {"q_ja": "空所に入る語は？ He ___ soccer.", "type": "mc", "options": ["play", "plays", "playing"], "answer": 1, "explain_ja": "主語が he の現在形は plays のように s がつきます。"},
+        {"q_ja": "正しい質問はどれ？", "type": "mc", "options": ["Do you like music?", "Are you like music?", "Does you like music?"], "answer": 0, "explain_ja": "一般動詞 like の質問は Do you like...? です。"},
+        {"q_ja": "Does she ___ English? に入る語は？", "type": "mc", "options": ["study", "studies", "studying"], "answer": 0, "explain_ja": "Does を使う疑問文では動詞は原形 study に戻ります。"},
+        {"q_ja": "She studies English. の意味は？", "type": "mc", "options": ["彼女は英語を勉強します。", "彼女は英語を勉強しますか？", "私は英語を勉強します。"], "answer": 0, "explain_ja": "studies は study に三人称単数の s がついた形です。"},
+        {"q_ja": "ふだんの習慣を表す文はどれ？", "type": "mc", "options": ["I read every day.", "I reading now.", "I was read."], "answer": 0, "explain_ja": "every day と現在形で、ふだんの習慣を表します。"}
+      ]
+    },
+    {
+      "id": "grammar-03",
+      "theme": "Grammar Basics",
+      "theme_ja": "基礎文法",
+      "level": "beginner",
+      "title_en": "Articles and Plurals",
+      "title_ja": "a / an / the と複数形",
+      "est_minutes": 8,
+      "summary_ja": "数えられる名詞の前につける a / an と、複数形の s、the の基本を練習します。",
+      "illustration": {
+        "scene": "A tidy classroom table with one apple, an orange, two books, and simple label cards for a, an, the, and plural s, cheerful flat study illustration",
+        "caption_ja": "ものを数えながら冠詞と複数形を学ぶ場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：a book / an apple / two books / the book の違いを、短い文で使い分けられるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "ひとつのものには a / an をつける",
+          "pattern": "a + 子音ではじまる語 / an + 母音ではじまる語",
+          "explanation_ja": "はじめて話に出る『ひとつのもの』には a または an を使います。",
+          "examples": ["a book", "a pen", "an apple"]
+        },
+        {
+          "title_ja": "2つ以上は名詞に s をつける",
+          "pattern": "one book / two books",
+          "explanation_ja": "数えられるものが2つ以上あるとき、多くの場合は名詞の最後に s をつけます。",
+          "examples": ["two books", "three pencils", "five apples"]
+        },
+        {
+          "title_ja": "the は『その』と特定するとき",
+          "pattern": "the + 名詞",
+          "explanation_ja": "相手もどれかわかるもの、すでに話に出たものには the を使います。",
+          "examples": ["I have a book. The book is blue.", "Open the door.", "Look at the picture."]
+        }
+      ],
+      "vocab": [
+        {"en": "a", "ja": "ひとつの・ある", "example_en": "This is a book.", "example_ja": "これは本です。"},
+        {"en": "an", "ja": "ひとつの・ある（母音の前）", "example_en": "This is an apple.", "example_ja": "これはリンゴです。"},
+        {"en": "the", "ja": "その", "example_en": "The book is blue.", "example_ja": "その本は青いです。"},
+        {"en": "plural", "ja": "複数形", "example_en": "Books is a plural noun.", "example_ja": "books は複数形の名詞です。"},
+        {"en": "one", "ja": "1つの", "example_en": "I have one pen.", "example_ja": "私はペンを1本持っています。"},
+        {"en": "two", "ja": "2つの", "example_en": "I have two pens.", "example_ja": "私はペンを2本持っています。"}
+      ],
+      "dialogue": [
+        {"speaker": "Vivi", "text": "What is this?", "ja": "これは何ですか？"},
+        {"speaker": "Learner", "text": "It is a book.", "ja": "それは本です。"},
+        {"speaker": "Vivi", "text": "Good. What is this fruit?", "ja": "いいですね。この果物は何ですか？"},
+        {"speaker": "Learner", "text": "It is an apple.", "ja": "それはリンゴです。"},
+        {"speaker": "Vivi", "text": "How many books do you see?", "ja": "本はいくつ見えますか？"},
+        {"speaker": "Learner", "text": "I see two books. The books are blue.", "ja": "本が2冊見えます。その本は青いです。"}
+      ],
+      "phrases": [
+        {"en": "It is a ~.", "ja": "それは～です。", "when_ja": "ひとつのものを説明するとき"},
+        {"en": "I see two ~s.", "ja": "～が2つ見えます。", "when_ja": "複数のものを数えるとき"},
+        {"en": "The ~ is ...", "ja": "その～は...です。", "when_ja": "特定のものを説明するとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi shows objects on a desk and asks the learner to describe them with a, an, the, and plural nouns.",
+        "scenario_ja": "Viviが机の上のものを見せ、a / an / the と複数形を使って説明する練習をする。",
+        "opener": "Look at the desk. What do you see?",
+        "opener_ja": "机を見てください。何が見えますか？"
+      },
+      "speaking_lines": [
+        "It is a book.",
+        "It is an apple.",
+        "I see two books."
+      ],
+      "quiz": [
+        {"q_ja": "正しい表現はどれ？", "type": "mc", "options": ["a apple", "an apple", "the apple an"], "answer": 1, "explain_ja": "apple は母音ではじまるので an apple です。"},
+        {"q_ja": "正しい表現はどれ？", "type": "mc", "options": ["a book", "an book", "book a"], "answer": 0, "explain_ja": "book は子音ではじまるので a book です。"},
+        {"q_ja": "two のあとに合う形は？", "type": "mc", "options": ["book", "books", "a book"], "answer": 1, "explain_ja": "2つ以上は複数形 books にします。"},
+        {"q_ja": "the の基本的な意味に近いものは？", "type": "mc", "options": ["ある", "その", "2つの"], "answer": 1, "explain_ja": "the は相手にもわかる『その』ものを指します。"},
+        {"q_ja": "I have a pen. ___ pen is red. に入る語は？", "type": "mc", "options": ["A", "An", "The"], "answer": 2, "explain_ja": "一度出た pen をもう一度指すので The pen とします。"},
+        {"q_ja": "複数形として正しいものは？", "type": "mc", "options": ["three pencils", "three pencil", "a three pencils"], "answer": 0, "explain_ja": "three のあとでは名詞を複数形 pencils にします。"}
+      ]
+    },
+    {
+      "id": "grammar-04",
+      "theme": "Grammar Basics",
+      "theme_ja": "基礎文法",
+      "level": "elementary",
+      "title_en": "Wh-Questions",
+      "title_ja": "疑問詞の質問",
+      "est_minutes": 9,
+      "summary_ja": "what / where / when / who / how を使い、情報をたずねる基礎質問を練習します。",
+      "illustration": {
+        "scene": "A learner sorting colorful question cards labeled what, where, when, who, and how on a desk, simple classroom background, clear friendly study illustration",
+        "caption_ja": "疑問詞カードで質問の形を学ぶ場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：何・どこ・いつ・だれ・どのようにを聞く疑問詞を選び、自然な語順で質問を作ること。",
+      "grammar_points": [
+        {
+          "title_ja": "疑問詞は文の最初に置く",
+          "pattern": "Wh-word + do/does/be + 主語 + ...?",
+          "explanation_ja": "知りたい情報を表す what / where / when などを、質問の先頭に置きます。",
+          "examples": ["What do you like?", "Where are you from?", "When do you study?"]
+        },
+        {
+          "title_ja": "what は『何』、where は『どこ』",
+          "pattern": "What = 何 / Where = どこ",
+          "explanation_ja": "ものや内容を聞くときは what、場所を聞くときは where を使います。",
+          "examples": ["What is this?", "What do you eat?", "Where is the station?"]
+        },
+        {
+          "title_ja": "who / when / how もよく使う",
+          "pattern": "Who = だれ / When = いつ / How = どのように",
+          "explanation_ja": "人・時間・方法や状態を聞くときに使います。",
+          "examples": ["Who is your teacher?", "When do you get up?", "How are you?"]
+        }
+      ],
+      "vocab": [
+        {"en": "what", "ja": "何", "example_en": "What do you like?", "example_ja": "あなたは何が好きですか？"},
+        {"en": "where", "ja": "どこ", "example_en": "Where are you from?", "example_ja": "あなたはどこの出身ですか？"},
+        {"en": "when", "ja": "いつ", "example_en": "When do you study?", "example_ja": "あなたはいつ勉強しますか？"},
+        {"en": "who", "ja": "だれ", "example_en": "Who is your teacher?", "example_ja": "あなたの先生はだれですか？"},
+        {"en": "how", "ja": "どのように・どんな状態で", "example_en": "How are you?", "example_ja": "元気ですか？"},
+        {"en": "from", "ja": "～から・～出身で", "example_en": "I am from Japan.", "example_ja": "私は日本出身です。"}
+      ],
+      "dialogue": [
+        {"speaker": "Theo", "text": "What do you like?", "ja": "あなたは何が好きですか？"},
+        {"speaker": "Learner", "text": "I like music.", "ja": "私は音楽が好きです。"},
+        {"speaker": "Theo", "text": "Where are you from?", "ja": "あなたはどこの出身ですか？"},
+        {"speaker": "Learner", "text": "I am from Japan.", "ja": "私は日本出身です。"},
+        {"speaker": "Theo", "text": "When do you study English?", "ja": "あなたはいつ英語を勉強しますか？"},
+        {"speaker": "Learner", "text": "I study English after dinner.", "ja": "私は夕食後に英語を勉強します。"}
+      ],
+      "phrases": [
+        {"en": "What do you like?", "ja": "何が好きですか？", "when_ja": "好みをたずねるとき"},
+        {"en": "Where are you from?", "ja": "どこの出身ですか？", "when_ja": "出身地をたずねるとき"},
+        {"en": "When do you ~?", "ja": "いつ～しますか？", "when_ja": "時間や習慣をたずねるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Theo interviews the learner using wh-questions about likes, home, daily life, and study habits.",
+        "scenario_ja": "Theoが疑問詞を使って、好きなもの・出身・生活・学習習慣をインタビューする。",
+        "opener": "I'll ask you some wh-questions. First, what do you like?",
+        "opener_ja": "疑問詞の質問をします。まず、あなたは何が好きですか？"
+      },
+      "speaking_lines": [
+        "What do you like?",
+        "Where are you from?",
+        "When do you study English?"
+      ],
+      "quiz": [
+        {"q_ja": "『何』をたずねる疑問詞は？", "type": "mc", "options": ["what", "where", "when"], "answer": 0, "explain_ja": "what は『何』をたずねます。"},
+        {"q_ja": "『どこ』をたずねる疑問詞は？", "type": "mc", "options": ["who", "where", "how"], "answer": 1, "explain_ja": "where は『どこ』をたずねます。"},
+        {"q_ja": "『いつ』をたずねる疑問詞は？", "type": "mc", "options": ["when", "what", "who"], "answer": 0, "explain_ja": "when は『いつ』をたずねます。"},
+        {"q_ja": "正しい語順はどれ？", "type": "mc", "options": ["What do you like?", "Do what you like?", "You like what do?"], "answer": 0, "explain_ja": "疑問詞 what を最初に置き、Do you like...? の形を続けます。"},
+        {"q_ja": "Where are you from? の意味は？", "type": "mc", "options": ["何が好きですか？", "どこの出身ですか？", "いつ勉強しますか？"], "answer": 1, "explain_ja": "where は場所を聞く語で、from と一緒に出身地を聞けます。"},
+        {"q_ja": "Who is your teacher? の Who は何を聞いている？", "type": "mc", "options": ["人", "場所", "時間"], "answer": 0, "explain_ja": "who は『だれ』、つまり人をたずねる疑問詞です。"}
+      ]
+    },
+    {
+      "id": "grade-jh1",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "beginner",
+      "title_en": "Junior High 1 Review",
+      "title_ja": "中1：英語の土台",
+      "est_minutes": 10,
+      "summary_ja": "be動詞・一般動詞・疑問詞・命令文など、中1で固めたい基本文と日常表現を復習します。",
+      "illustration": {
+        "scene": "A first-year junior high student reviewing English basics with cards for be verbs, do questions, and classroom phrases on a clean desk, friendly study mood",
+        "caption_ja": "中1英語の基本をカードで復習する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：自己紹介、好きなもの、場所や時間の質問を、短い正しい英文で言えるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "be動詞と一般動詞を分ける",
+          "pattern": "I am ... / I like ...",
+          "explanation_ja": "状態を説明するときは be動詞、動作や好みを言うときは一般動詞を使います。",
+          "examples": ["I am twelve.", "I like soccer.", "She is my friend."]
+        },
+        {
+          "title_ja": "疑問文は形で覚える",
+          "pattern": "Are you ...? / Do you ...? / What do you ...?",
+          "explanation_ja": "be動詞の文は be動詞を前に、一般動詞の文は Do を前に置きます。",
+          "examples": ["Are you busy?", "Do you play tennis?", "What do you study?"]
+        },
+        {
+          "title_ja": "命令文と依頼表現",
+          "pattern": "Open ... / Please ... / Let's ...",
+          "explanation_ja": "教室や日常で使う短い指示・依頼・誘いの表現をまとめて覚えます。",
+          "examples": ["Open your book.", "Please listen.", "Let's practice."]
+        }
+      ],
+      "vocab": [
+        {"en": "classmate", "ja": "クラスメイト", "example_en": "She is my classmate.", "example_ja": "彼女は私のクラスメイトです。"},
+        {"en": "after school", "ja": "放課後", "example_en": "I play tennis after school.", "example_ja": "私は放課後にテニスをします。"},
+        {"en": "listen", "ja": "聞く", "example_en": "Please listen carefully.", "example_ja": "注意して聞いてください。"},
+        {"en": "practice", "ja": "練習する", "example_en": "Let's practice English.", "example_ja": "英語を練習しましょう。"},
+        {"en": "of course", "ja": "もちろん", "example_en": "Of course, I can help.", "example_ja": "もちろん、手伝えます。"},
+        {"en": "a little", "ja": "少し", "example_en": "I can speak a little English.", "example_ja": "私は少し英語を話せます。"}
+      ],
+      "dialogue": [
+        {"speaker": "Vivi", "text": "Are you a new student?", "ja": "あなたは新入生ですか？"},
+        {"speaker": "Learner", "text": "Yes, I am. I am in class one.", "ja": "はい、そうです。私は1組です。"},
+        {"speaker": "Vivi", "text": "Do you play sports after school?", "ja": "放課後にスポーツをしますか？"},
+        {"speaker": "Learner", "text": "Yes, I play tennis after school.", "ja": "はい、放課後にテニスをします。"},
+        {"speaker": "Vivi", "text": "Great. Let's practice English together.", "ja": "いいですね。一緒に英語を練習しましょう。"},
+        {"speaker": "Learner", "text": "Of course. Please speak slowly.", "ja": "もちろんです。ゆっくり話してください。"}
+      ],
+      "phrases": [
+        {"en": "Please speak slowly.", "ja": "ゆっくり話してください。", "when_ja": "聞き取りが難しいとき"},
+        {"en": "Let's practice together.", "ja": "一緒に練習しましょう。", "when_ja": "相手を誘うとき"},
+        {"en": "I can speak a little English.", "ja": "少し英語を話せます。", "when_ja": "自分の英語力を伝えるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi is a classmate on the first day of junior high school. The learner introduces themselves and talks about after-school activities.",
+        "scenario_ja": "中学初日のクラスメイトViviに、自己紹介と放課後の活動を話す。",
+        "opener": "Hi! Are you in this class too?",
+        "opener_ja": "こんにちは！あなたもこのクラスですか？"
+      },
+      "speaking_lines": [
+        "I am a new student.",
+        "I play tennis after school.",
+        "Please speak slowly."
+      ],
+      "quiz": [
+        {"q_ja": "be動詞の疑問文として正しいものは？", "type": "mc", "options": ["Are you busy?", "Do you busy?", "You are busy?"], "answer": 0, "explain_ja": "be動詞の疑問文は Are you...? のように be動詞を前に出します。"},
+        {"q_ja": "一般動詞の疑問文として正しいものは？", "type": "mc", "options": ["Are you play tennis?", "Do you play tennis?", "You do play tennis?"], "answer": 1, "explain_ja": "一般動詞 play の質問は Do you play...? です。"},
+        {"q_ja": "『放課後』はどれ？", "type": "mc", "options": ["after school", "before class", "in class"], "answer": 0, "explain_ja": "after school は『放課後』です。"},
+        {"q_ja": "『一緒に練習しよう』に合う英文は？", "type": "mc", "options": ["Let's practice together.", "Please practice yesterday.", "I am practice together."], "answer": 0, "explain_ja": "Let's + 動詞の原形で『～しよう』です。"},
+        {"q_ja": "『ゆっくり話してください』に合う英文は？", "type": "mc", "options": ["Please speak slowly.", "Please read fast.", "Please listen slowly."], "answer": 0, "explain_ja": "speak slowly で『ゆっくり話す』です。"},
+        {"q_ja": "I can speak a little English. の意味は？", "type": "mc", "options": ["英語を少し話せます。", "英語を少し読みません。", "英語をたくさん教えます。"], "answer": 0, "explain_ja": "a little は『少し』、can speak は『話せる』です。"}
+      ]
+    },
+    {
+      "id": "grade-jh2",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "elementary",
+      "title_en": "Junior High 2 Review",
+      "title_ja": "中2：時制と比較",
+      "est_minutes": 11,
+      "summary_ja": "過去形・未来表現・比較・不定詞/動名詞など、中2で広がる表現を復習します。",
+      "illustration": {
+        "scene": "A second-year junior high student organizing timeline cards for past, future, comparison, and to verbs on a desk, calm focused study illustration",
+        "caption_ja": "時制と比較を整理して復習する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：昨日・明日・より好き・～することを、自然な英語の形で言えるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "過去形と未来表現",
+          "pattern": "I visited ... / I will ... / I am going to ...",
+          "explanation_ja": "いつの話かをはっきりさせるため、動詞の形や will / be going to を使います。",
+          "examples": ["I visited Kyoto yesterday.", "I will call you later.", "I am going to study tonight."]
+        },
+        {
+          "title_ja": "比較級・最上級",
+          "pattern": "bigger than ... / the biggest ...",
+          "explanation_ja": "2つを比べるときは比較級、3つ以上で一番を言うときは最上級を使います。",
+          "examples": ["This bag is bigger than that one.", "English is more interesting than math.", "She is the fastest runner."]
+        },
+        {
+          "title_ja": "不定詞と動名詞",
+          "pattern": "to study / studying",
+          "explanation_ja": "『～すること』『～するために』『～して』など、動詞を名詞や目的のように使います。",
+          "examples": ["I want to learn English.", "I enjoy reading books.", "I went to the library to study."]
+        }
+      ],
+      "vocab": [
+        {"en": "yesterday", "ja": "昨日", "example_en": "I watched a movie yesterday.", "example_ja": "私は昨日映画を見ました。"},
+        {"en": "tomorrow", "ja": "明日", "example_en": "I will study tomorrow.", "example_ja": "私は明日勉強します。"},
+        {"en": "than", "ja": "～よりも", "example_en": "This book is easier than that one.", "example_ja": "この本はあの本より簡単です。"},
+        {"en": "the best", "ja": "一番よい", "example_en": "This is the best answer.", "example_ja": "これが一番よい答えです。"},
+        {"en": "look forward to", "ja": "～を楽しみにする", "example_en": "I look forward to the trip.", "example_ja": "旅行を楽しみにしています。"},
+        {"en": "be good at", "ja": "～が得意である", "example_en": "She is good at cooking.", "example_ja": "彼女は料理が得意です。"}
+      ],
+      "dialogue": [
+        {"speaker": "Theo", "text": "What did you do yesterday?", "ja": "昨日何をしましたか？"},
+        {"speaker": "Learner", "text": "I visited the library to study.", "ja": "勉強するために図書館へ行きました。"},
+        {"speaker": "Theo", "text": "Nice. What are you going to do tomorrow?", "ja": "いいですね。明日は何をする予定ですか？"},
+        {"speaker": "Learner", "text": "I am going to practice soccer.", "ja": "サッカーを練習する予定です。"},
+        {"speaker": "Theo", "text": "Are you good at soccer?", "ja": "サッカーは得意ですか？"},
+        {"speaker": "Learner", "text": "A little. My brother is better than me.", "ja": "少しです。兄のほうが私より上手です。"}
+      ],
+      "phrases": [
+        {"en": "What did you do yesterday?", "ja": "昨日何をしましたか？", "when_ja": "過去の出来事をたずねるとき"},
+        {"en": "I am going to ~.", "ja": "～する予定です。", "when_ja": "予定を伝えるとき"},
+        {"en": "be good at ~", "ja": "～が得意である", "when_ja": "得意なことを言うとき"}
+      ],
+      "roleplay": {
+        "scenario": "Theo asks about what the learner did yesterday, their plans for tomorrow, and things they are good at.",
+        "scenario_ja": "Theoが昨日したこと、明日の予定、得意なことをたずねる。",
+        "opener": "Let's talk about yesterday and tomorrow. What did you do yesterday?",
+        "opener_ja": "昨日と明日のことを話しましょう。昨日は何をしましたか？"
+      },
+      "speaking_lines": [
+        "I visited the library to study.",
+        "I am going to practice soccer.",
+        "My brother is better than me."
+      ],
+      "quiz": [
+        {"q_ja": "過去形として正しいものは？ I ___ Kyoto yesterday.", "type": "mc", "options": ["visit", "visited", "will visit"], "answer": 1, "explain_ja": "yesterday があるので過去形 visited を使います。"},
+        {"q_ja": "予定を表す正しい文は？", "type": "mc", "options": ["I am going to study.", "I going study.", "I am study to going."], "answer": 0, "explain_ja": "be going to + 動詞の原形で予定を表します。"},
+        {"q_ja": "比較級として正しいものは？", "type": "mc", "options": ["more easy", "easier", "the easier"], "answer": 1, "explain_ja": "easy の比較級は easier です。"},
+        {"q_ja": "『～が得意です』はどれ？", "type": "mc", "options": ["be good at ~", "be kind of ~", "be late for ~"], "answer": 0, "explain_ja": "be good at ~ は『～が得意である』です。"},
+        {"q_ja": "I want ___ English. に入る語は？", "type": "mc", "options": ["learn", "to learn", "learning to"], "answer": 1, "explain_ja": "want のあとに動詞を続けるときは want to learn の形が基本です。"},
+        {"q_ja": "I enjoy ___ books. に入る語は？", "type": "mc", "options": ["read", "to read", "reading"], "answer": 2, "explain_ja": "enjoy のあとに動詞を続けるときは動名詞 reading を使います。"}
+      ]
+    },
+    {
+      "id": "grade-jh3",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "elementary",
+      "title_en": "Junior High 3 Review",
+      "title_ja": "中3：説明する英語",
+      "est_minutes": 12,
+      "summary_ja": "現在完了・受け身・関係代名詞・間接疑問など、まとまった説明に必要な文法を復習します。",
+      "illustration": {
+        "scene": "A third-year junior high student connecting grammar puzzle pieces labeled present perfect, passive voice, relative pronouns, and indirect questions, bright study illustration",
+        "caption_ja": "説明文の文法をパズルのように整理する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：経験・受け身・人やものの詳しい説明を使い、少し長い英文を作れるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "現在完了",
+          "pattern": "have / has + 過去分詞",
+          "explanation_ja": "経験、継続、完了を表すときに使います。ever / never / for / since とよく一緒に使います。",
+          "examples": ["I have visited Nara.", "She has lived here for three years.", "Have you ever tried sushi?"]
+        },
+        {
+          "title_ja": "受け身",
+          "pattern": "be動詞 + 過去分詞",
+          "explanation_ja": "『～される』と言いたいときに使います。作った人や行った人は by で表せます。",
+          "examples": ["This book is read by many students.", "English is spoken in many countries.", "The cake was made by my sister."]
+        },
+        {
+          "title_ja": "関係代名詞と間接疑問",
+          "pattern": "the person who ... / Do you know where ...?",
+          "explanation_ja": "名詞を詳しく説明したり、文の中に疑問の内容を入れたりします。",
+          "examples": ["This is the book that I bought.", "I know a student who can speak French.", "Do you know where he lives?"]
+        }
+      ],
+      "vocab": [
+        {"en": "ever", "ja": "今までに", "example_en": "Have you ever been to Osaka?", "example_ja": "今までに大阪へ行ったことがありますか？"},
+        {"en": "never", "ja": "一度も～ない", "example_en": "I have never seen snow.", "example_ja": "私は一度も雪を見たことがありません。"},
+        {"en": "since", "ja": "～以来", "example_en": "I have lived here since April.", "example_ja": "私は4月以来ここに住んでいます。"},
+        {"en": "be interested in", "ja": "～に興味がある", "example_en": "I am interested in science.", "example_ja": "私は科学に興味があります。"},
+        {"en": "by the way", "ja": "ところで", "example_en": "By the way, do you know him?", "example_ja": "ところで、彼を知っていますか？"},
+        {"en": "as soon as", "ja": "～するとすぐに", "example_en": "Call me as soon as you arrive.", "example_ja": "着いたらすぐ電話してください。"}
+      ],
+      "dialogue": [
+        {"speaker": "Vivi", "text": "Have you ever made a speech in English?", "ja": "今までに英語でスピーチをしたことがありますか？"},
+        {"speaker": "Learner", "text": "Yes, I have. I talked about a book that I like.", "ja": "はい、あります。好きな本について話しました。"},
+        {"speaker": "Vivi", "text": "What kind of book was it?", "ja": "どんな本でしたか？"},
+        {"speaker": "Learner", "text": "It was a story written by a Japanese writer.", "ja": "日本人作家によって書かれた物語でした。"},
+        {"speaker": "Vivi", "text": "Do you know where the writer was born?", "ja": "その作家がどこで生まれたか知っていますか？"},
+        {"speaker": "Learner", "text": "I'm not sure, but I am interested in it.", "ja": "確かではありませんが、それに興味があります。"}
+      ],
+      "phrases": [
+        {"en": "Have you ever ~?", "ja": "今までに～したことがありますか？", "when_ja": "経験をたずねるとき"},
+        {"en": "be interested in ~", "ja": "～に興味がある", "when_ja": "関心のある話題を伝えるとき"},
+        {"en": "I'm not sure, but ~.", "ja": "確かではありませんが、～。", "when_ja": "断言を避けて続けるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi helps the learner prepare a short English speech using present perfect, passive voice, and relative clauses.",
+        "scenario_ja": "Viviが現在完了・受け身・関係代名詞を使った短い英語スピーチ準備を手伝う。",
+        "opener": "Let's prepare your speech. Have you chosen a topic?",
+        "opener_ja": "スピーチを準備しましょう。テーマは選びましたか？"
+      },
+      "speaking_lines": [
+        "I have never made a long speech.",
+        "This book was written by a Japanese writer.",
+        "I know a student who can speak French."
+      ],
+      "quiz": [
+        {"q_ja": "現在完了の形はどれ？", "type": "mc", "options": ["have + 過去分詞", "be + 動詞ing", "will + 過去形"], "answer": 0, "explain_ja": "現在完了は have / has + 過去分詞です。"},
+        {"q_ja": "経験をたずねる文はどれ？", "type": "mc", "options": ["Have you ever been to Kyoto?", "Are you going to Kyoto?", "Did you Kyoto ever?"], "answer": 0, "explain_ja": "Have you ever...? で経験をたずねます。"},
+        {"q_ja": "受け身として正しいものは？", "type": "mc", "options": ["This book is read by many students.", "This book reads by many students.", "This book is reading many students."], "answer": 0, "explain_ja": "受け身は be動詞 + 過去分詞です。"},
+        {"q_ja": "the book ___ I bought に入る語は？", "type": "mc", "options": ["that", "where", "when"], "answer": 0, "explain_ja": "ものを説明する関係代名詞として that が使えます。"},
+        {"q_ja": "間接疑問として自然な語順は？", "type": "mc", "options": ["Do you know where he lives?", "Do you know where does he live?", "Do you know where lives he?"], "answer": 0, "explain_ja": "間接疑問では where he lives のように平叙文の語順になります。"},
+        {"q_ja": "be interested in の意味は？", "type": "mc", "options": ["～に興味がある", "～に遅れる", "～に反対する"], "answer": 0, "explain_ja": "be interested in ~ は『～に興味がある』です。"}
+      ]
+    },
+    {
+      "id": "grade-hs1",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "intermediate",
+      "title_en": "High School 1 Review",
+      "title_ja": "高1：文を組み立てる",
+      "est_minutes": 12,
+      "summary_ja": "5文型・助動詞・分詞・接続表現を使い、理由や意見をはっきり伝える力を伸ばします。",
+      "illustration": {
+        "scene": "A first-year high school student building sentence blocks labeled subject, verb, object, complement, and reason, focused but warm study scene",
+        "caption_ja": "文型ブロックで英文を組み立てる場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：文型を意識して、意見・理由・推量を1〜2文で伝えられるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "5文型の土台",
+          "pattern": "SV / SVC / SVO / SVOO / SVOC",
+          "explanation_ja": "主語・動詞・目的語・補語の役割を意識すると、長い文も読みやすくなります。",
+          "examples": ["She looks happy.", "I gave him a book.", "Music makes me relaxed."]
+        },
+        {
+          "title_ja": "助動詞で気持ちを加える",
+          "pattern": "can / should / must / may + 動詞の原形",
+          "explanation_ja": "可能、助言、義務、推量などを短く表せます。",
+          "examples": ["You should take a break.", "It may rain tonight.", "We must follow the rules."]
+        },
+        {
+          "title_ja": "理由と対比をつなぐ",
+          "pattern": "because / although / however / for example",
+          "explanation_ja": "高校英語では、意見を理由や例で支える表現が重要になります。",
+          "examples": ["I agree because it is practical.", "Although it was difficult, I enjoyed it.", "However, there is one problem."]
+        }
+      ],
+      "vocab": [
+        {"en": "in my opinion", "ja": "私の意見では", "example_en": "In my opinion, reading is important.", "example_ja": "私の意見では、読書は大切です。"},
+        {"en": "for example", "ja": "例えば", "example_en": "For example, we can use apps.", "example_ja": "例えば、アプリを使えます。"},
+        {"en": "however", "ja": "しかしながら", "example_en": "However, it takes time.", "example_ja": "しかしながら、それには時間がかかります。"},
+        {"en": "make sense", "ja": "筋が通る・理解できる", "example_en": "Your idea makes sense.", "example_ja": "あなたの考えは筋が通っています。"},
+        {"en": "take a break", "ja": "休憩する", "example_en": "You should take a break.", "example_ja": "休憩したほうがいいです。"},
+        {"en": "follow the rules", "ja": "規則に従う", "example_en": "We must follow the rules.", "example_ja": "私たちは規則に従わなければなりません。"}
+      ],
+      "dialogue": [
+        {"speaker": "Theo", "text": "In your opinion, should students use tablets in class?", "ja": "あなたの意見では、生徒は授業でタブレットを使うべきですか？"},
+        {"speaker": "Learner", "text": "Yes. In my opinion, tablets are useful.", "ja": "はい。私の意見では、タブレットは役に立ちます。"},
+        {"speaker": "Theo", "text": "Can you give me a reason?", "ja": "理由を教えてくれますか？"},
+        {"speaker": "Learner", "text": "We can look up words quickly. For example, dictionaries are easy to use.", "ja": "単語をすばやく調べられます。例えば、辞書が使いやすいです。"},
+        {"speaker": "Theo", "text": "That makes sense. Is there any problem?", "ja": "筋が通っていますね。何か問題はありますか？"},
+        {"speaker": "Learner", "text": "However, we must follow the rules.", "ja": "しかし、規則に従わなければなりません。"}
+      ],
+      "phrases": [
+        {"en": "In my opinion, ~.", "ja": "私の意見では、～。", "when_ja": "意見を述べるとき"},
+        {"en": "That makes sense.", "ja": "それは筋が通っています。", "when_ja": "相手の意見に納得したとき"},
+        {"en": "However, ~.", "ja": "しかしながら、～。", "when_ja": "反対面や注意点を述べるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Theo asks the learner to give a short opinion with one reason and one caution.",
+        "scenario_ja": "Theoが学習者に、理由と注意点を添えて短い意見を言う練習をさせる。",
+        "opener": "Let's practice giving opinions. Should students use smartphones for study?",
+        "opener_ja": "意見を述べる練習をしましょう。生徒は勉強にスマホを使うべきですか？"
+      },
+      "speaking_lines": [
+        "In my opinion, tablets are useful.",
+        "For example, dictionaries are easy to use.",
+        "However, we must follow the rules."
+      ],
+      "quiz": [
+        {"q_ja": "SVC の文はどれ？", "type": "mc", "options": ["She looks happy.", "She reads a book.", "She gave me a book."], "answer": 0, "explain_ja": "happy が主語 She の状態を説明する補語です。"},
+        {"q_ja": "助言を表す助動詞はどれ？", "type": "mc", "options": ["should", "may", "was"], "answer": 0, "explain_ja": "should は『～すべきだ、～したほうがよい』です。"},
+        {"q_ja": "『私の意見では』はどれ？", "type": "mc", "options": ["In my opinion", "By the way", "At once"], "answer": 0, "explain_ja": "In my opinion は意見を述べる導入表現です。"},
+        {"q_ja": "対比を示す語はどれ？", "type": "mc", "options": ["however", "because", "for example"], "answer": 0, "explain_ja": "however は『しかしながら』で対比を示します。"},
+        {"q_ja": "That makes sense. の意味は？", "type": "mc", "options": ["それは筋が通っています。", "それは音を立てます。", "それは高価です。"], "answer": 0, "explain_ja": "make sense は『意味が通る、納得できる』です。"},
+        {"q_ja": "must のあとに続く動詞の形は？", "type": "mc", "options": ["原形", "過去形", "動名詞"], "answer": 0, "explain_ja": "助動詞 must のあとには動詞の原形を置きます。"}
+      ]
+    },
+    {
+      "id": "grade-hs2",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "intermediate",
+      "title_en": "High School 2 Review",
+      "title_ja": "高2：複雑な文を読む・書く",
+      "est_minutes": 13,
+      "summary_ja": "仮定法・完了形・分詞構文・関係詞を使い、条件や背景を含む文を理解します。",
+      "illustration": {
+        "scene": "A second-year high school student mapping a complex English sentence with arrows for condition, reason, relative clause, and conclusion, clean academic illustration",
+        "caption_ja": "複雑な英文の構造を図解する場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：仮定・背景説明・補足情報を含む文を読み取り、自分でも短く使えるようになること。",
+      "grammar_points": [
+        {
+          "title_ja": "仮定法",
+          "pattern": "If I were ... / If I had ...",
+          "explanation_ja": "現実とは違うことや過去への後悔を、距離を置いた形で表します。",
+          "examples": ["If I were you, I would ask for help.", "If I had more time, I would read it.", "I wish I could speak fluently."]
+        },
+        {
+          "title_ja": "完了形と受け身の組み合わせ",
+          "pattern": "have been + 過去分詞",
+          "explanation_ja": "過去から現在まで続く受け身の状態を表せます。",
+          "examples": ["This song has been loved for years.", "The rule has been changed.", "English has been used around the world."]
+        },
+        {
+          "title_ja": "分詞構文と補足説明",
+          "pattern": "Using ... / Seen from ...",
+          "explanation_ja": "理由・時・条件・付帯状況を短くまとめて、文に情報を足します。",
+          "examples": ["Using this app, we can learn faster.", "Seen from a distance, the town looks small.", "Feeling tired, I went home early."]
+        }
+      ],
+      "vocab": [
+        {"en": "as a result", "ja": "その結果", "example_en": "As a result, sales increased.", "example_ja": "その結果、売上が増えました。"},
+        {"en": "on the other hand", "ja": "一方で", "example_en": "On the other hand, it costs money.", "example_ja": "一方で、それにはお金がかかります。"},
+        {"en": "in addition", "ja": "さらに", "example_en": "In addition, it saves time.", "example_ja": "さらに、それは時間を節約します。"},
+        {"en": "take into account", "ja": "～を考慮に入れる", "example_en": "We should take safety into account.", "example_ja": "安全を考慮に入れるべきです。"},
+        {"en": "be likely to", "ja": "～しそうである", "example_en": "It is likely to rain.", "example_ja": "雨が降りそうです。"},
+        {"en": "in terms of", "ja": "～の観点から", "example_en": "In terms of cost, this plan is better.", "example_ja": "費用の観点では、この案のほうがよいです。"}
+      ],
+      "dialogue": [
+        {"speaker": "Vivi", "text": "If you had more free time, what would you do?", "ja": "もっと自由時間があったら、何をしますか？"},
+        {"speaker": "Learner", "text": "If I had more time, I would learn another language.", "ja": "もっと時間があれば、別の言語を学びます。"},
+        {"speaker": "Vivi", "text": "That sounds interesting. Why?", "ja": "面白そうですね。なぜですか？"},
+        {"speaker": "Learner", "text": "Learning languages, I can understand more cultures.", "ja": "言語を学ぶことで、より多くの文化を理解できます。"},
+        {"speaker": "Vivi", "text": "Good point. What should we take into account?", "ja": "いい視点です。何を考慮すべきでしょうか？"},
+        {"speaker": "Learner", "text": "We should take time and motivation into account.", "ja": "時間とやる気を考慮すべきです。"}
+      ],
+      "phrases": [
+        {"en": "If I were you, I would ~.", "ja": "私があなたなら、～します。", "when_ja": "助言をやわらかく言うとき"},
+        {"en": "take ~ into account", "ja": "～を考慮に入れる", "when_ja": "判断材料を示すとき"},
+        {"en": "on the other hand", "ja": "一方で", "when_ja": "別の見方を示すとき"}
+      ],
+      "roleplay": {
+        "scenario": "Vivi and the learner discuss a study plan, using hypothetical ideas and balanced arguments.",
+        "scenario_ja": "Viviと学習者が、仮定の話やバランスの取れた理由を使って学習計画を話し合う。",
+        "opener": "If you had three extra hours every week, how would you use them?",
+        "opener_ja": "毎週あと3時間あったら、どう使いますか？"
+      },
+      "speaking_lines": [
+        "If I had more time, I would learn another language.",
+        "We should take time into account.",
+        "On the other hand, it may be difficult."
+      ],
+      "quiz": [
+        {"q_ja": "仮定法として自然な文は？", "type": "mc", "options": ["If I were you, I would ask.", "If I am you, I will asked.", "If I was you, I ask."], "answer": 0, "explain_ja": "現実と違う仮定では If I were you, I would ... が定番です。"},
+        {"q_ja": "have been + 過去分詞 の意味に近いものは？", "type": "mc", "options": ["ずっと～されてきた", "今～している", "これから～する"], "answer": 0, "explain_ja": "完了形と受け身を組み合わせ、過去から現在までの受け身を表します。"},
+        {"q_ja": "『一方で』はどれ？", "type": "mc", "options": ["on the other hand", "as soon as", "by mistake"], "answer": 0, "explain_ja": "on the other hand は別の見方を示す接続表現です。"},
+        {"q_ja": "take into account の意味は？", "type": "mc", "options": ["考慮に入れる", "説明を始める", "責任を取る"], "answer": 0, "explain_ja": "take ~ into account は『～を考慮に入れる』です。"},
+        {"q_ja": "It is likely to rain. の意味は？", "type": "mc", "options": ["雨が降りそうです。", "雨が好きです。", "雨が止みました。"], "answer": 0, "explain_ja": "be likely to は『～しそうである』です。"},
+        {"q_ja": "分詞構文 Using this app, ... の働きに近いものは？", "type": "mc", "options": ["このアプリを使うことで", "このアプリは使われた", "このアプリを使うべきでない"], "answer": 0, "explain_ja": "Using ... は『～を使って、～することで』のように背景や手段を添えます。"}
+      ]
+    },
+    {
+      "id": "grade-hs3",
+      "theme": "Grade English",
+      "theme_ja": "学年別英語",
+      "level": "intermediate",
+      "title_en": "High School 3 Review",
+      "title_ja": "高3：発信と入試表現",
+      "est_minutes": 14,
+      "summary_ja": "要約・意見展開・ディスコースマーカー・慣用句を使い、読解と英作文を仕上げます。",
+      "illustration": {
+        "scene": "A third-year high school student preparing an English essay with outline notes for claim, evidence, counterargument, and conclusion, quiet exam study atmosphere",
+        "caption_ja": "英作文の構成をノートにまとめる場面",
+        "aspect": "3:2"
+      },
+      "warmup_ja": "ゴール：論理の流れを示す表現と慣用句を使い、短い意見文や要約を組み立てること。",
+      "grammar_points": [
+        {
+          "title_ja": "要約と主張の型",
+          "pattern": "The passage says ... / The main point is ... / I believe ...",
+          "explanation_ja": "読解後の要約や英作文では、主張・根拠・結論をはっきり分けます。",
+          "examples": ["The main point is that sleep affects learning.", "I believe this idea is practical.", "This example supports the author's opinion."]
+        },
+        {
+          "title_ja": "譲歩と反論",
+          "pattern": "It is true that ..., but ... / Some people say ..., however ...",
+          "explanation_ja": "反対意見を認めてから自分の主張を出すと、説得力が増します。",
+          "examples": ["It is true that online study is convenient, but face-to-face communication is also important.", "Some people say it is expensive; however, it saves time."]
+        },
+        {
+          "title_ja": "慣用句は文脈で使う",
+          "pattern": "keep in mind / play an important role / make a difference",
+          "explanation_ja": "丸暗記だけでなく、意見文や説明文の中で使える形で覚えます。",
+          "examples": ["We should keep this problem in mind.", "Technology plays an important role.", "Small actions can make a difference."]
+        }
+      ],
+      "vocab": [
+        {"en": "in conclusion", "ja": "結論として", "example_en": "In conclusion, we should reduce waste.", "example_ja": "結論として、私たちはごみを減らすべきです。"},
+        {"en": "to some extent", "ja": "ある程度は", "example_en": "I agree to some extent.", "example_ja": "私はある程度は賛成です。"},
+        {"en": "keep in mind", "ja": "心に留める", "example_en": "Keep this rule in mind.", "example_ja": "この規則を心に留めてください。"},
+        {"en": "play an important role", "ja": "重要な役割を果たす", "example_en": "Education plays an important role.", "example_ja": "教育は重要な役割を果たします。"},
+        {"en": "make a difference", "ja": "違いを生む・効果がある", "example_en": "Small actions can make a difference.", "example_ja": "小さな行動が違いを生むことがあります。"},
+        {"en": "from my point of view", "ja": "私の観点からは", "example_en": "From my point of view, the plan is fair.", "example_ja": "私の観点からは、その計画は公平です。"}
+      ],
+      "dialogue": [
+        {"speaker": "Theo", "text": "What is the main point of this passage?", "ja": "この文章の主なポイントは何ですか？"},
+        {"speaker": "Learner", "text": "The main point is that small actions can make a difference.", "ja": "主なポイントは、小さな行動が違いを生むということです。"},
+        {"speaker": "Theo", "text": "Do you agree with the author?", "ja": "筆者に賛成ですか？"},
+        {"speaker": "Learner", "text": "I agree to some extent, but we need larger changes too.", "ja": "ある程度は賛成ですが、より大きな変化も必要です。"},
+        {"speaker": "Theo", "text": "Good. Can you add a conclusion?", "ja": "いいですね。結論を加えられますか？"},
+        {"speaker": "Learner", "text": "In conclusion, we should keep this problem in mind.", "ja": "結論として、私たちはこの問題を心に留めるべきです。"}
+      ],
+      "phrases": [
+        {"en": "The main point is that ~.", "ja": "主なポイントは～ということです。", "when_ja": "要約を始めるとき"},
+        {"en": "I agree to some extent, but ~.", "ja": "ある程度は賛成ですが、～。", "when_ja": "部分的に賛成しつつ反論するとき"},
+        {"en": "In conclusion, ~.", "ja": "結論として、～。", "when_ja": "意見文を締めるとき"}
+      ],
+      "roleplay": {
+        "scenario": "Theo asks the learner to summarize a short passage and give a balanced opinion using discourse markers.",
+        "scenario_ja": "Theoが短い文章の要約と、接続表現を使ったバランスのよい意見を求める。",
+        "opener": "Let's practice essay speaking. What is the main point of the article?",
+        "opener_ja": "英作文型のスピーキングを練習しましょう。その記事の主なポイントは何ですか？"
+      },
+      "speaking_lines": [
+        "The main point is that small actions can make a difference.",
+        "I agree to some extent, but we need larger changes too.",
+        "In conclusion, we should keep this problem in mind."
+      ],
+      "quiz": [
+        {"q_ja": "要約の導入として自然なのは？", "type": "mc", "options": ["The main point is that ~.", "By mistake, that ~.", "No longer point is ~."], "answer": 0, "explain_ja": "The main point is that ~. は主旨を述べる定番表現です。"},
+        {"q_ja": "『ある程度は』はどれ？", "type": "mc", "options": ["to some extent", "as soon as", "in a hurry"], "answer": 0, "explain_ja": "to some extent は『ある程度は』です。"},
+        {"q_ja": "keep in mind の意味は？", "type": "mc", "options": ["心に留める", "手に持つ", "時間を守る"], "answer": 0, "explain_ja": "keep in mind は『覚えておく、心に留める』です。"},
+        {"q_ja": "play an important role の意味は？", "type": "mc", "options": ["重要な役割を果たす", "重要な試合をする", "役を忘れる"], "answer": 0, "explain_ja": "role は『役割』で、play an important role は『重要な役割を果たす』です。"},
+        {"q_ja": "譲歩して反論する表現は？", "type": "mc", "options": ["It is true that ..., but ...", "It is book that ..., and ...", "True is it ..., because ..."], "answer": 0, "explain_ja": "It is true that ..., but ... は相手の一理を認めてから反論できます。"},
+        {"q_ja": "結論を示す表現はどれ？", "type": "mc", "options": ["In conclusion", "For instance", "At first sight"], "answer": 0, "explain_ja": "In conclusion は『結論として』です。"}
+      ]
+    }
+  ]
+}

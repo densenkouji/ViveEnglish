@@ -1,0 +1,14 @@
+# ViveEnglish backend dependencies
+# Loose lower bounds so pip picks versions that ship prebuilt wheels for your
+# Python (including 3.13 / 3.14). Pinning old versions forces a source build of
+# pydantic-core (Rust) which fails on newer Python.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.9
+openai>=1.40
+python-multipart>=0.0.9
+
+# Optional: Foundry Local SDK (auto-discovery of the local endpoint + live
+# transcription). The app runs fine without it (offline fallbacks).
+#   pip install foundry-local-sdk          # macOS / Linux
+#   pip install foundry-local-sdk-winml    # Windows

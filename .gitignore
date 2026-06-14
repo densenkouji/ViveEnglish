@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.build-venv/
+venv/
+env/
+
+# App data (local SQLite DB, generated at runtime)
+data/
+
+# PyInstaller / packaging output
+build/
+dist/
+*.spec.bak
+vendor/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log

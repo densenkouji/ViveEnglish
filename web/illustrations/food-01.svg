@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400" role="img" aria-label="Ordering at a Restaurant">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde3e0"/><stop offset="1" stop-color="#f7c0bb"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="600" height="400" rx="24" fill="url(#bg)"/>
+  <circle cx="300" cy="170" r="138" fill="#ffffff" opacity="0.35"/>
+  
+        <g transform="translate(300,175)">
+          <ellipse cx="0" cy="92" rx="150" ry="20" fill="#000000" opacity="0.07"/>
+          <path d="M-120 6 Q0 28 120 6 L96 78 Q0 110 -96 78 Z" fill="#f7fbff" stroke="#1d3b5b" stroke-width="4" stroke-linejoin="round"/>
+          <ellipse cx="0" cy="6" rx="120" ry="30" fill="#e0726a" stroke="#1d3b5b" stroke-width="4"/>
+          <ellipse cx="0" cy="2" rx="92" ry="20" fill="#fff3d6" stroke="#1d3b5b" stroke-width="2"/>
+          <path d="M-70 0 Q-40 -14 -10 0 M0 -6 Q30 -18 64 -4" stroke="#1d3b5b" stroke-width="3" fill="none"/>
+          <circle cx="40" cy="2" r="10" fill="#ffd27a" stroke="#1d3b5b" stroke-width="2"/>
+          <path d="M-30 4 q-6 -10 2 -18" stroke="#e0726a" stroke-width="4" fill="none"/>
+          <g stroke="#1d3b5b" stroke-width="5" stroke-linecap="round">
+            <line x1="70" y1="-86" x2="120" y2="14"/><line x1="92" y1="-90" x2="134" y2="6"/>
+          </g>
+          <g stroke="#9dc9ed" stroke-width="4" fill="none" opacity="0.8">
+            <path d="M-30 -36 q-12 -16 0 -32"/><path d="M0 -42 q-12 -16 0 -32"/><path d="M30 -36 q-12 -16 0 -32"/>
+          </g>
+        </g>
+  <!-- caption bar -->
+  <rect x="0" y="318" width="600" height="82" fill="#1d3b5b" opacity="0.92"/>
+  <text x="32" y="352" font-family="'Segoe UI','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif" font-size="26" font-weight="700" fill="#ffffff">Ordering at a Restaurant</text>
+  <text x="32" y="380" font-family="'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif" font-size="17" fill="#cfe0f2">レストランで注文する</text>
+  <!-- theme tag (width fits the label, right-aligned) -->
+  <g transform="translate(500,30)">
+    <rect x="0" y="-20" width="72" height="30" rx="15" fill="#ffffff" opacity="0.85"/>
+    <text x="36.0" y="0" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e0726a">Food</text>
+  </g>
+  <!-- placeholder note -->
+  <text x="300" y="300" text-anchor="middle" font-family="'Hiragino Kaku Gothic ProN',sans-serif" font-size="12" fill="#1d3b5b" opacity="0.5">差し替え用プレースホルダー / replace freely</text>
+</svg>

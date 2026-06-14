@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-label="High school 2 complex sentences">
+  <rect width="900" height="600" fill="#edf7f4"/>
+  <rect x="120" y="100" width="660" height="400" rx="28" fill="#fff" stroke="#d6e6e1" stroke-width="5"/>
+  <path d="M230 205 C330 150 415 220 450 300 C485 380 575 450 680 390" fill="none" stroke="#3d8b7d" stroke-width="9" stroke-linecap="round"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#2d2a26">
+    <text x="230" y="195" font-size="28" font-weight="700">If</text>
+    <text x="450" y="292" font-size="28" font-weight="700">having</text>
+    <text x="680" y="385" font-size="28" font-weight="700">which</text>
+    <text x="450" y="440" font-size="42" font-weight="700">High School 2</text>
+  </g>
+</svg>
