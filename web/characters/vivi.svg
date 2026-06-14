@@ -1,83 +1,70 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Vivi">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Vivi cat tutor">
   <defs>
-    <radialGradient id="bgVivi" cx="0.5" cy="0.4" r="0.7">
-      <stop offset="0" stop-color="#dfe9f5"/>
+    <radialGradient id="bgVivi" cx="0.5" cy="0.38" r="0.72">
+      <stop offset="0" stop-color="#edf5ff"/>
       <stop offset="1" stop-color="#c7d8ec"/>
     </radialGradient>
-    <linearGradient id="hairVivi" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#eef2f8"/>
-      <stop offset="0.38" stop-color="#cfd8e7"/>
-      <stop offset="0.72" stop-color="#7fb0e0"/>
-      <stop offset="1" stop-color="#3f78c0"/>
+    <linearGradient id="furVivi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfdff"/>
+      <stop offset="0.55" stop-color="#e6edf8"/>
+      <stop offset="1" stop-color="#c8d7ea"/>
     </linearGradient>
-    <linearGradient id="hairShadeVivi" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#b7c7dd"/>
-      <stop offset="1" stop-color="#356cad"/>
+    <linearGradient id="scarfVivi" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7fb0e0"/>
+      <stop offset="1" stop-color="#3f78c0"/>
     </linearGradient>
     <clipPath id="cVivi"><circle cx="200" cy="200" r="188"/></clipPath>
   </defs>
+
   <circle cx="200" cy="200" r="188" fill="url(#bgVivi)"/>
   <circle cx="200" cy="200" r="188" fill="none" stroke="#9db8d6" stroke-width="4" opacity="0.5"/>
-  <g clip-path="url(#cVivi)" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M118 180 C108 113 139 74 200 72 C261 74 292 113 282 180
-             C288 226 270 262 247 286 C249 245 250 198 250 153
-             C250 120 229 100 200 100 C171 100 150 120 150 153
-             C150 198 151 245 153 286 C130 262 112 226 118 180 Z"
-          fill="url(#hairVivi)"/>
-    <path d="M48 400 C55 326 112 288 176 282 L224 282 C288 288 345 326 352 400 Z"
+
+  <g clip-path="url(#cVivi)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M72 400 C82 318 130 272 200 272 C270 272 318 318 328 400 Z"
           fill="#f3f6fb" stroke="#b9c6d6" stroke-width="3"/>
-    <path d="M181 214 L219 214 L223 288 C210 300 190 300 177 288 Z"
-          fill="#f3c8a2" stroke="#d9a87f" stroke-width="2"/>
-    <path d="M182 220 L218 220 L220 237 C207 246 193 246 180 237 Z"
-          fill="#dca27a" opacity="0.45"/>
-    <path d="M150 290 L200 360 L176 300 Z" fill="#e9eef6"/>
-    <path d="M250 290 L200 360 L224 300 Z" fill="#e9eef6"/>
-    <path d="M150 290 L205 332 M250 290 L195 332" stroke="#c2cedd" stroke-width="2.5" fill="none"/>
-    <path d="M174 282 L200 326 L226 282 L226 300 L200 316 L174 300 Z"
-          fill="#ffffff" stroke="#d7dee8" stroke-width="2"/>
-    <path d="M200 300 L211 313 L206 372 L200 384 L194 372 L189 313 Z" fill="#3f78c0"/>
-    <path d="M193 326 L207 326 M192 348 L208 348" stroke="#2f5e9c" stroke-width="2.5"/>
-    <path d="M193 300 L200 309 L207 300 L200 296 Z" fill="#2f5e9c"/>
-    <ellipse cx="146" cy="158" rx="11" ry="15" fill="#f3c8a2" stroke="#cf9b73" stroke-width="2"/>
-    <ellipse cx="254" cy="158" rx="11" ry="15" fill="#f3c8a2" stroke="#cf9b73" stroke-width="2"/>
-    <path d="M144 151 C144 113 166 94 200 94 C234 94 256 113 256 151
-             C256 195 229 218 200 226 C171 218 144 195 144 151 Z"
-          fill="#f3c8a2" stroke="#d9a87f" stroke-width="2.5"/>
-    <path d="M138 158 C136 113 162 86 201 86 C239 86 264 112 262 157
-             C251 133 230 119 204 117 C189 116 176 124 167 146
-             C163 133 162 119 166 106 C149 116 140 133 138 158 Z"
-          fill="url(#hairVivi)"/>
-    <path d="M157 112 C171 126 188 133 207 133 C196 142 180 147 164 146
-             C160 136 157 124 157 112 Z"
-          fill="url(#hairShadeVivi)" opacity="0.5"/>
-    <path d="M238 119 C250 132 257 151 256 174 C255 200 249 221 241 239
-             C239 206 242 167 238 119 Z"
-          fill="url(#hairShadeVivi)" opacity="0.72"/>
-    <path d="M142 157 C138 190 144 216 157 240 C160 210 158 177 154 150 Z"
-          fill="url(#hairShadeVivi)" opacity="0.7"/>
-    <ellipse cx="166" cy="178" rx="11" ry="6" fill="#e89a86" opacity="0.30"/>
-    <ellipse cx="234" cy="178" rx="11" ry="6" fill="#e89a86" opacity="0.30"/>
-    <path d="M164 140 C174 136 184 136 190 138 M210 138 C221 136 231 137 236 140"
-          stroke="#7d7466" stroke-width="3" fill="none"/>
-    <path d="M163 150 C171 143 184 143 193 150 C190 164 178 165 168 162 C165 159 163 155 163 150 Z" fill="#ffffff"/>
-    <path d="M207 150 C215 143 228 143 237 150 C232 164 220 165 210 162 C208 159 207 155 207 150 Z" fill="#ffffff"/>
-    <circle cx="179" cy="153" r="8" fill="#4a7fbf"/>
-    <circle cx="221" cy="153" r="8" fill="#4a7fbf"/>
-    <circle cx="179" cy="153" r="4" fill="#26303e"/>
-    <circle cx="221" cy="153" r="4" fill="#26303e"/>
-    <circle cx="182" cy="150.5" r="2.1" fill="#fff"/>
-    <circle cx="224" cy="150.5" r="2.1" fill="#fff"/>
-    <path d="M162 149 C171 140 184 140 194 149" stroke="#33414f" stroke-width="3.3" fill="none"/>
-    <path d="M206 149 C215 140 228 140 238 149" stroke="#33414f" stroke-width="3.3" fill="none"/>
-    <g fill="none" stroke="#3a4250" stroke-width="3">
-      <rect x="156" y="138" width="46" height="30" rx="13"/>
-      <rect x="198" y="138" width="46" height="30" rx="13"/>
-    </g>
-    <line x1="202" y1="150" x2="198" y2="150" stroke="#3a4250" stroke-width="3"/>
-    <path d="M156 150 C150 148 144 148 138 149 M244 150 C250 148 256 148 262 149"
-          stroke="#3a4250" stroke-width="3" fill="none"/>
-    <path d="M198 168 C195 176 197 180 201 181" fill="none" stroke="#dca27a" stroke-width="2.2"/>
-    <path d="M186 196 C195 204 205 204 214 196" stroke="#9c5b4a" stroke-width="3" fill="none"/>
+    <path d="M132 302 C156 332 244 332 268 302 L252 400 L148 400 Z"
+          fill="#e8eef8" stroke="#c6d2e1" stroke-width="3"/>
+
+    <path d="M137 120 L104 50 L171 91 Z" fill="url(#furVivi)" stroke="#9fb5ce" stroke-width="4"/>
+    <path d="M263 120 L296 50 L229 91 Z" fill="url(#furVivi)" stroke="#9fb5ce" stroke-width="4"/>
+    <path d="M132 104 L115 67 L151 91 Z" fill="#f5c7cf" opacity="0.78"/>
+    <path d="M268 104 L285 67 L249 91 Z" fill="#f5c7cf" opacity="0.78"/>
+
+    <path d="M103 172 C103 111 145 77 200 77 C255 77 297 111 297 172
+             C297 238 253 282 200 282 C147 282 103 238 103 172 Z"
+          fill="url(#furVivi)" stroke="#9fb5ce" stroke-width="4"/>
+    <path d="M124 178 C132 130 161 103 200 103 C239 103 268 130 276 178
+             C257 148 229 134 200 134 C171 134 143 148 124 178 Z"
+          fill="#d6e4f4" opacity="0.72"/>
+    <path d="M181 78 C173 104 176 126 190 143 M219 78 C227 104 224 126 210 143"
+          stroke="#b8c9dd" stroke-width="8" opacity="0.6" fill="none"/>
+
+    <ellipse cx="154" cy="196" rx="17" ry="10" fill="#f1a8b2" opacity="0.38"/>
+    <ellipse cx="246" cy="196" rx="17" ry="10" fill="#f1a8b2" opacity="0.38"/>
+    <path d="M143 156 C154 148 169 148 180 156" stroke="#506070" stroke-width="5" fill="none"/>
+    <path d="M220 156 C231 148 246 148 257 156" stroke="#506070" stroke-width="5" fill="none"/>
+    <path d="M142 171 C153 160 171 160 183 171 C180 188 162 190 149 183 C145 180 142 176 142 171 Z" fill="#ffffff"/>
+    <path d="M217 171 C229 160 247 160 258 171 C255 188 237 190 224 183 C220 180 217 176 217 171 Z" fill="#ffffff"/>
+    <ellipse cx="163" cy="174" rx="8" ry="13" fill="#4a7fbf"/>
+    <ellipse cx="237" cy="174" rx="8" ry="13" fill="#4a7fbf"/>
+    <ellipse cx="163" cy="174" rx="4" ry="8" fill="#26303e"/>
+    <ellipse cx="237" cy="174" rx="4" ry="8" fill="#26303e"/>
+    <circle cx="166" cy="169" r="2.3" fill="#fff"/>
+    <circle cx="240" cy="169" r="2.3" fill="#fff"/>
+
+    <path d="M192 194 C196 190 204 190 208 194 L200 203 Z" fill="#df8fa0" stroke="#b96f82" stroke-width="2"/>
+    <path d="M200 203 L200 214" stroke="#7d6970" stroke-width="2.5"/>
+    <path d="M184 218 C193 228 207 228 216 218" stroke="#8b5d68" stroke-width="3" fill="none"/>
+    <path d="M119 205 C93 198 75 198 54 207 M119 220 C93 224 75 232 57 245"
+          stroke="#9aa9bb" stroke-width="3" fill="none"/>
+    <path d="M281 205 C307 198 325 198 346 207 M281 220 C307 224 325 232 343 245"
+          stroke="#9aa9bb" stroke-width="3" fill="none"/>
+
+    <path d="M144 284 C171 301 229 301 256 284 L269 323 C238 347 162 347 131 323 Z"
+          fill="url(#scarfVivi)" stroke="#356cad" stroke-width="3"/>
+    <path d="M190 305 L211 305 L207 365 L200 382 L193 365 Z" fill="#ffffff" opacity="0.95"/>
+    <circle cx="200" cy="319" r="5" fill="#356cad"/>
+    <circle cx="200" cy="342" r="5" fill="#356cad"/>
   </g>
 </svg>

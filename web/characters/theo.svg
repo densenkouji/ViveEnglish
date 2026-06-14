@@ -1,66 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Theo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Theo robot tutor">
   <defs>
-    <radialGradient id="bgTheo" cx="0.5" cy="0.4" r="0.7">
-      <stop offset="0" stop-color="#dfeeec"/>
+    <radialGradient id="bgTheo" cx="0.5" cy="0.38" r="0.72">
+      <stop offset="0" stop-color="#edf8f5"/>
       <stop offset="1" stop-color="#c4ded6"/>
     </radialGradient>
-    <linearGradient id="hairTheo" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5a3b25"/>
-      <stop offset="1" stop-color="#2e2018"/>
+    <linearGradient id="metalTheo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f9fbfb"/>
+      <stop offset="0.56" stop-color="#dfe8e7"/>
+      <stop offset="1" stop-color="#b9c9c7"/>
+    </linearGradient>
+    <linearGradient id="tealTheo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4ca393"/>
+      <stop offset="1" stop-color="#2f6d62"/>
     </linearGradient>
     <clipPath id="cTheo"><circle cx="200" cy="200" r="188"/></clipPath>
   </defs>
+
   <circle cx="200" cy="200" r="188" fill="url(#bgTheo)"/>
   <circle cx="200" cy="200" r="188" fill="none" stroke="#94c2b6" stroke-width="4" opacity="0.5"/>
-  <g clip-path="url(#cTheo)" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M48 400 C55 326 112 288 176 282 L224 282 C288 288 345 326 352 400 Z"
-          fill="#f3f6fb" stroke="#b9c6d6" stroke-width="3"/>
-    <path d="M181 214 L219 214 L223 288 C210 300 190 300 177 288 Z"
-          fill="#f3c8a2" stroke="#d9a87f" stroke-width="2"/>
-    <path d="M182 220 L218 220 L220 237 C207 246 193 246 180 237 Z"
-          fill="#dca27a" opacity="0.45"/>
-    <path d="M150 290 L200 360 L176 300 Z" fill="#e9eef6"/>
-    <path d="M250 290 L200 360 L224 300 Z" fill="#e9eef6"/>
-    <path d="M150 290 L205 332 M250 290 L195 332" stroke="#c2cedd" stroke-width="2.5" fill="none"/>
-    <path d="M174 282 L200 326 L226 282 L226 300 L200 316 L174 300 Z"
-          fill="#ffffff" stroke="#d7dee8" stroke-width="2"/>
-    <path d="M200 300 L211 313 L206 372 L200 384 L194 372 L189 313 Z" fill="#2f6d62"/>
-    <path d="M193 326 L207 326 M192 348 L208 348" stroke="#1f5048" stroke-width="2.5"/>
-    <path d="M193 300 L200 309 L207 300 L200 296 Z" fill="#1f5048"/>
-    <ellipse cx="146" cy="158" rx="11" ry="15" fill="#f3c8a2" stroke="#cf9b73" stroke-width="2"/>
-    <ellipse cx="254" cy="158" rx="11" ry="15" fill="#f3c8a2" stroke="#cf9b73" stroke-width="2"/>
-    <path d="M144 151 C144 113 166 94 200 94 C234 94 256 113 256 151
-             C256 195 229 218 200 226 C171 218 144 195 144 151 Z"
-          fill="#f3c8a2" stroke="#d9a87f" stroke-width="2.5"/>
-    <path d="M137 155 C136 108 164 78 201 78 C241 78 265 107 263 156
-             C253 131 232 116 207 113 C184 111 162 119 146 137
-             C141 143 138 150 137 155 Z"
-          fill="url(#hairTheo)"/>
-    <path d="M144 141 C154 111 178 93 207 94 C235 95 254 114 260 145
-             C244 132 225 127 204 128 C180 128 160 134 144 141 Z"
-          fill="#4a301f"/>
-    <path d="M153 132 C166 111 184 101 207 103 C199 116 184 126 166 133 Z"
-          fill="#2a1b14" opacity="0.48"/>
-    <path d="M190 101 C211 103 230 112 243 128 C225 125 207 123 188 128 Z"
-          fill="#2a1b14" opacity="0.42"/>
-    <path d="M139 154 C139 169 141 182 145 194 M261 154 C261 169 259 182 255 194"
-          stroke="#342217" stroke-width="8" fill="none"/>
-    <ellipse cx="166" cy="178" rx="11" ry="6" fill="#e89a86" opacity="0.24"/>
-    <ellipse cx="234" cy="178" rx="11" ry="6" fill="#e89a86" opacity="0.24"/>
-    <path d="M164 140 C174 136 184 136 190 138 M210 138 C221 136 231 137 236 140"
-          stroke="#2a1f17" stroke-width="3" fill="none"/>
-    <path d="M163 150 C171 143 184 143 193 150 C190 164 178 165 168 162 C165 159 163 155 163 150 Z" fill="#ffffff"/>
-    <path d="M207 150 C215 143 228 143 237 150 C232 164 220 165 210 162 C208 159 207 155 207 150 Z" fill="#ffffff"/>
-    <circle cx="179" cy="153" r="8" fill="#5b4634"/>
-    <circle cx="221" cy="153" r="8" fill="#5b4634"/>
-    <circle cx="179" cy="153" r="4" fill="#26303e"/>
-    <circle cx="221" cy="153" r="4" fill="#26303e"/>
-    <circle cx="182" cy="150.5" r="2.1" fill="#fff"/>
-    <circle cx="224" cy="150.5" r="2.1" fill="#fff"/>
-    <path d="M162 149 C171 140 184 140 194 149" stroke="#33414f" stroke-width="3.3" fill="none"/>
-    <path d="M206 149 C215 140 228 140 238 149" stroke="#33414f" stroke-width="3.3" fill="none"/>
-    <path d="M198 168 C195 176 197 180 201 181" fill="none" stroke="#dca27a" stroke-width="2.2"/>
-    <path d="M186 196 C195 204 205 204 214 196" stroke="#9c5b4a" stroke-width="3" fill="none"/>
+
+  <g clip-path="url(#cTheo)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 400 C82 318 132 275 200 275 C268 275 318 318 330 400 Z"
+          fill="#eff5f4" stroke="#adc5c0" stroke-width="3"/>
+    <path d="M132 314 C160 337 240 337 268 314 L254 400 L146 400 Z"
+          fill="url(#tealTheo)" stroke="#25594f" stroke-width="3"/>
+
+    <line x1="200" y1="64" x2="200" y2="38" stroke="#2f6d62" stroke-width="7"/>
+    <circle cx="200" cy="31" r="12" fill="#e9b949" stroke="#b58122" stroke-width="4"/>
+
+    <rect x="98" y="78" width="204" height="204" rx="58"
+          fill="url(#metalTheo)" stroke="#7fa69f" stroke-width="5"/>
+    <rect x="119" y="103" width="162" height="112" rx="34"
+          fill="#f8fffd" stroke="#a8bfbb" stroke-width="3"/>
+    <path d="M120 238 C146 266 254 266 280 238" stroke="#cad9d6" stroke-width="10" fill="none" opacity="0.75"/>
+
+    <rect x="70" y="154" width="35" height="66" rx="16" fill="#d2dfdd" stroke="#7fa69f" stroke-width="4"/>
+    <rect x="295" y="154" width="35" height="66" rx="16" fill="#d2dfdd" stroke="#7fa69f" stroke-width="4"/>
+    <circle cx="88" cy="186" r="7" fill="#4ca393"/>
+    <circle cx="312" cy="186" r="7" fill="#4ca393"/>
+
+    <rect x="138" y="142" width="50" height="36" rx="17" fill="#ffffff" stroke="#2f6d62" stroke-width="4"/>
+    <rect x="212" y="142" width="50" height="36" rx="17" fill="#ffffff" stroke="#2f6d62" stroke-width="4"/>
+    <line x1="188" y1="160" x2="212" y2="160" stroke="#2f6d62" stroke-width="4"/>
+    <circle cx="163" cy="160" r="9" fill="#2f6d62"/>
+    <circle cx="237" cy="160" r="9" fill="#2f6d62"/>
+    <circle cx="166" cy="157" r="2.5" fill="#ffffff"/>
+    <circle cx="240" cy="157" r="2.5" fill="#ffffff"/>
+
+    <path d="M154 118 C168 110 184 110 195 118 M205 118 C218 110 234 110 246 118"
+          stroke="#6a8580" stroke-width="5" fill="none"/>
+    <path d="M179 203 C190 213 210 213 221 203" stroke="#2f6d62" stroke-width="5" fill="none"/>
+    <circle cx="200" cy="191" r="5" fill="#e9b949" stroke="#b58122" stroke-width="2"/>
+
+    <path d="M147 282 L177 329 L200 301 L223 329 L253 282"
+          fill="#ffffff" stroke="#c3d0ce" stroke-width="3"/>
+    <path d="M184 307 L200 291 L216 307 L209 362 L200 380 L191 362 Z"
+          fill="#2f6d62" stroke="#25594f" stroke-width="3"/>
+    <path d="M159 350 H181 M219 350 H241" stroke="#dfe8e7" stroke-width="5"/>
   </g>
 </svg>
