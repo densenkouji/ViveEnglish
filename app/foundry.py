@@ -18,10 +18,14 @@ degrades gracefully to an OFFLINE response so the rest of the app keeps working.
 """
 from __future__ import annotations
 
+import io
 import json
+import os
 import re
 import socket
+import tempfile
 import threading
+import wave
 from typing import Any
 
 from . import config
@@ -40,6 +44,10 @@ _setup: dict[str, Any] = {"state": "idle", "progress": 0.0, "phase": "",
                           "model": None, "message": "", "detail": ""}
 _setup_lock = threading.Lock()
 _setup_thread: "threading.Thread | None" = None
+
+
+def _base_status() -> dict[str, Any]:
+    return dict(_status)
 
 
 # --- URL / port helpers ----------------------------------------------------
@@ -321,12 +329,223 @@ def init() -> dict[str, Any]:
 
 
 def status() -> dict[str, Any]:
-    return dict(_status)
+    st = _base_status()
+    st["speech"] = speech_status()
+    return st
 
 
 def get_manager():
     """Expose the managed SDK manager (used for on-device transcription)."""
     return _manager
+
+
+# --- Speech-to-text (Whisper via the SDK audio client) ---------------------
+
+# Tried in order; first one the catalog resolves wins.
+ASR_CANDIDATES = ["whisper-base", "whisper-small", "whisper-tiny",
+                  "whisper-large-v3", "nemotron-speech-streaming-en-0.6b"]
+
+
+def _sdk_manager(initialize: bool = True):
+    """Return a FoundryLocalManager instance for SDK-only features.
+
+    The OpenAI-compatible chat endpoint can be discovered without the SDK, but
+    on-device transcription needs the SDK manager/catalog. If the managed web
+    service was not started by this process, initialize the SDK singleton here
+    so speech status and transcription can still use local models.
+    """
+    global _manager
+    if _manager is not None:
+        return _manager, None
+    try:  # pragma: no cover - depends on local install
+        from foundry_local_sdk import Configuration, FoundryLocalManager  # type: ignore
+    except Exception as exc:
+        return None, f"sdk unavailable: {exc}"
+
+    try:  # pragma: no cover
+        manager = getattr(FoundryLocalManager, "instance", None)
+        if manager is None and not initialize:
+            return None, "sdk manager not initialized"
+        if manager is None:
+            cfg = Configuration(app_name="viveenglish")
+            FoundryLocalManager.initialize(cfg)
+            manager = FoundryLocalManager.instance
+        if manager is not None:
+            _manager = manager
+            return manager, None
+    except Exception as exc:
+        return None, f"sdk manager unavailable: {exc}"
+    return None, "sdk manager unavailable"
+
+
+def _resolve_asr_model(manager):
+    aliases = [config.TRANSCRIBE_MODEL] + [a for a in ASR_CANDIDATES if a != config.TRANSCRIBE_MODEL]
+    for alias in aliases:
+        try:
+            m = manager.catalog.get_model(alias)
+            if m:
+                return m
+        except Exception:
+            continue
+    return None
+
+
+def _model_label(model, fallback: str) -> str:
+    return (getattr(model, "id", "") or getattr(model, "alias", "") or fallback)
+
+
+def speech_status(init_manager: bool = False) -> dict[str, Any]:
+    """Return SDK/Whisper readiness without downloading or loading a model."""
+    mgr, err = _sdk_manager(initialize=init_manager)
+    base = {
+        "online": False,
+        "sdk": not (err and err.startswith("sdk unavailable")),
+        "model": config.TRANSCRIBE_MODEL,
+        "cached": False,
+        "note": "",
+    }
+    if mgr is None:
+        if err and err.startswith("sdk unavailable"):
+            base["note"] = "Foundry Local SDK が見つかりません。"
+        elif err == "sdk manager not initialized":
+            base["note"] = "音声認識はまだ初期化されていません。設定画面で再接続または準備を実行してください。"
+        else:
+            base["note"] = "Foundry Local SDK の初期化に失敗しました。"
+        base["detail"] = err or ""
+        return base
+
+    model = _resolve_asr_model(mgr)
+    if model is None:
+        base["note"] = (f"音声認識モデル {config.TRANSCRIBE_MODEL} が見つかりません。"
+                        "設定またはモデル取得状況を確認してください。")
+        return base
+
+    cached = bool(getattr(model, "is_cached", False))
+    base.update(
+        online=True,
+        model=_model_label(model, config.TRANSCRIBE_MODEL),
+        cached=cached,
+        note=("Whisper音声認識を利用できます。"
+              if cached else "Whisperモデルは見つかりました。初回録音時にダウンロード/準備します。"),
+    )
+    return base
+
+
+def _wav_pcm16(data: bytes) -> bytes:
+    try:
+        with wave.open(io.BytesIO(data), "rb") as w:
+            return w.readframes(w.getnframes())
+    except Exception:
+        return data
+
+
+def transcribe(wav_bytes: bytes) -> dict[str, Any]:
+    """Transcribe a 16kHz mono WAV clip to English text, on-device.
+
+    Returns {online, text, note}. Never raises — the UI falls back to letting
+    the learner type what they said when STT is unavailable.
+    """
+    try:
+        from foundry_local_sdk import Configuration, FoundryLocalManager  # type: ignore  # noqa
+    except Exception:
+        return {"online": False, "text": "",
+                "note": ("音声認識SDK(foundry-local-sdk)が見つかりません。"
+                         "run.bat / run.sh で再起動するか、SDKをインストールしてください。"
+                         "聞き取った内容を入力してチェックできます。"),
+                "speech": speech_status()}
+
+    mgr, mgr_err = _sdk_manager(initialize=False)
+    if mgr is None and config.MANAGE_FOUNDRY:
+        init()
+        mgr, mgr_err = _sdk_manager(initialize=False)
+    if mgr is None:
+        mgr, mgr_err = _sdk_manager(initialize=True)
+    if mgr is None:
+        return {"online": False, "text": "",
+                "note": ("ローカルAIサービスに接続できません。"
+                         "設定画面のAI接続で音声認識の状態を確認してください。"),
+                "detail": mgr_err or "", "speech": speech_status()}
+
+    model = _resolve_asr_model(mgr)
+    if model is None:
+        return {"online": False, "text": "",
+                "note": (f"音声認識モデルが見つかりません。`foundry model run {config.TRANSCRIBE_MODEL}` "
+                         "で取得するか、環境変数 VIVE_TRANSCRIBE_MODEL を設定してください。"),
+                "speech": speech_status()}
+    try:
+        if not getattr(model, "is_cached", False):
+            model.download(lambda p: None)   # first-use download (blocking)
+        model.load()
+    except Exception as exc:
+        return {"online": False, "text": "",
+                "note": f"音声認識モデルの準備に失敗しました: {exc}",
+                "speech": speech_status()}
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    try:
+        tmp.write(wav_bytes)
+        tmp.close()
+        ac = model.get_audio_client()
+        try:
+            ac.settings.language = "en"
+        except Exception:
+            pass
+        text = _do_transcribe(ac, tmp.name, wav_bytes)
+        return {"online": True, "text": (text or "").strip(), "speech": speech_status()}
+    except Exception as exc:
+        return {"online": False, "text": "", "note": f"音声認識に失敗しました: {exc}",
+                "speech": speech_status()}
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
+
+
+def _chunk_text(chunk) -> str:
+    t = getattr(chunk, "text", None)
+    if t:
+        return t
+    content = getattr(chunk, "content", None)
+    if content:
+        try:
+            return content[0].text
+        except Exception:
+            try:
+                return content[0]["text"]
+            except Exception:
+                return ""
+    return ""
+
+
+def _do_transcribe(ac, path: str, wav_bytes: bytes) -> str:
+    # 1) File-based transcribe (stable SDK audio client).
+    fn = getattr(ac, "transcribe", None)
+    if callable(fn):
+        r = fn(path)
+        return getattr(r, "text", None) or (r if isinstance(r, str) else "")
+    # 2) File-based streaming transcribe.
+    fn = getattr(ac, "transcribe_audio_streaming", None)
+    if callable(fn):
+        return " ".join(_chunk_text(c) for c in fn(path)).strip()
+    # 3) Live transcription session fed raw PCM (streaming ASR models).
+    session = ac.create_live_transcription_session()
+    try:
+        session.settings.sample_rate = 16000
+        session.settings.channels = 1
+        session.settings.language = "en"
+    except Exception:
+        pass
+    session.start()
+    pcm = _wav_pcm16(wav_bytes)
+    for i in range(0, len(pcm), 960):
+        session.append(pcm[i:i + 960])
+    out = []
+    for result in session.get_stream():
+        if getattr(result, "is_final", False):
+            out.append(_chunk_text(result))
+    session.stop()
+    return " ".join(out).strip()
 
 
 # --- First-launch setup: download execution providers + chat model ---------
@@ -426,7 +645,26 @@ def _run_setup() -> None:
 
     # Refresh the OpenAI client so chat uses the freshly loaded model.
     init()
+
+    # Pre-fetch the speech-to-text (Whisper) model so the first recording in
+    # the speaking check doesn't trigger a slow synchronous download.
+    try:
+        asr = _resolve_asr_model(mgr)
+        if asr is not None and not getattr(asr, "is_cached", False):
+            _set_setup(state="downloading", phase="asr", progress=0,
+                       message="発話認識モデル（Whisper）をダウンロード中…")
+            asr.download(lambda p: _safe_progress(p))
+    except Exception:
+        pass  # best-effort; transcribe() will download on demand otherwise
+
     _set_setup(state="ready", progress=100, phase="done", message="準備が完了しました。")
+
+
+def _safe_progress(p):
+    try:
+        _set_setup(progress=float(p))
+    except Exception:
+        pass
 
 
 def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,

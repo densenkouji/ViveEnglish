@@ -81,19 +81,45 @@ function tutor() { return TUTORS[state.profile && state.profile.tutor_gender] ||
 
 function setAiBadge() {
   const el = $("#aiStatus");
-  el.classList.toggle("online", !!state.ai.online);
-  el.classList.toggle("offline", !state.ai.online);
-  $(".ai-label", el).textContent = state.ai.online ? "AI接続中" : "AIオフライン";
-  el.title = state.ai.online
-    ? `Foundry Local 接続中 (${state.ai.model || ""})`
-    : "Foundry Local 未接続 — 事前収録コンテンツで学習できます。クリックで再接続";
+  const speech = state.ai.speech || {};
+  const chatOk = !!state.ai.online;
+  const speechOk = !!speech.online;
+  el.classList.toggle("online", chatOk && speechOk);
+  el.classList.toggle("partial", (chatOk || speechOk) && !(chatOk && speechOk));
+  el.classList.toggle("offline", !chatOk && !speechOk);
+  $(".ai-label", el).textContent = chatOk && speechOk ? "AI/音声接続中"
+    : chatOk ? "AI接続中"
+    : speechOk ? "音声接続中"
+    : "AIオフライン";
+  el.title = [
+    `会話・翻訳: ${chatOk ? `接続中 (${state.ai.model || "model unknown"})` : "未接続"}`,
+    `音声認識: ${speechOk ? `利用可 (${speech.model || "model unknown"})` : "未接続"}`,
+    state.ai.note || speech.note || "クリックで再接続",
+  ].join("\n");
 }
 $("#aiStatus").addEventListener("click", async () => {
   toast("AIへ再接続中…");
   try { state.ai = await post("/ai/reconnect", {}); setAiBadge();
-    toast(state.ai.online ? "AIに接続しました" : "AIに接続できませんでした"); }
+    toast(state.ai.online || state.ai.speech?.online ? "AI状態を更新しました" : "AIに接続できませんでした"); }
   catch { toast("再接続に失敗しました"); }
 });
+
+function speechStatusLine() {
+  const s = state.ai.speech || {};
+  if (s.online && s.cached) return `音声認識: 接続中（${esc(s.model || "Whisper")}）`;
+  if (s.online) return `音声認識: モデル確認済み（${esc(s.model || "Whisper")}、初回準備あり）`;
+  return `音声認識: 未接続${s.note ? ` - ${esc(s.note)}` : ""}`;
+}
+
+function speechNoticeHtml() {
+  const s = state.ai.speech || {};
+  const cls = s.online ? "ok" : "";
+  const cache = s.online ? (s.cached ? "ダウンロード済み" : "初回録音時に準備") : "利用不可";
+  return `<div class="notice ${cls}">
+    <b>${speechStatusLine()}</b><br>
+    <span class="muted">状態: ${esc(cache)}${s.note ? ` / ${esc(s.note)}` : ""}</span>
+  </div>`;
+}
 
 // ---------- router ----------
 const routes = {};
@@ -138,14 +164,14 @@ routes.home = () => {
     <div class="card stat"><div class="v">${state.themes.length}</div><div class="l">テーマ</div></div>
   </div>
 
-  <h2>学習メソッド（3つの柱）</h2>
-  <p class="sub">「日本にいながら英語が話せるようになった人がみんなやっていること」を、各レッスンに落とし込みました。</p>
+  <h2>英語学習の3つの柱</h2>
+  <p class="sub">「英語を話せるようになった人がやっていること」を各レッスンに落とし込みました。</p>
   <div class="pillars">
-    <div class="card pillar"><div class="n">① 基礎固め</div><h3>語彙・フレーズ</h3>
+    <div class="card pillar"><div class="n">① 基礎</div><h3>語彙・フレーズ</h3>
       <p>自分が使う場面の単語と言い回しを、例文ごと音読して身につけます。</p></div>
-    <div class="card pillar"><div class="n">② 大量インプット</div><h3>読む・聞く</h3>
+    <div class="card pillar"><div class="n">② インプット</div><h3>読む・聞く</h3>
       <p>身近なテーマの会話を、単語タップ和訳と音声で繰り返しインプット。</p></div>
-    <div class="card pillar"><div class="n">③ 話すトレーニング</div><h3>AI対話・発話</h3>
+    <div class="card pillar"><div class="n">③ アウトプット</div><h3>AI対話・発話</h3>
       <p>AI相手のロールプレイと発話チェックで、覚えた表現を実際に使います。</p></div>
   </div>
 
@@ -305,6 +331,7 @@ function panelSpeak(L) {
     </div>`).join("");
   return `<div class="panel" data-panel="speak">
     <div class="hint">💡 お手本を聞いて、声に出して言ってみましょう。マイク録音（要Foundry Local音声認識）または入力でAIが発音・正確さをチェックします。</div>
+    ${speechNoticeHtml()}
     ${items}
   </div>`;
 }
@@ -488,8 +515,15 @@ async function toggleRecord(btn, L) {
         const fd = new FormData(); fd.append("audio", wav, "clip.wav");
         const r = await fetch(API + "/speech/transcribe", { method: "POST", body: fd });
         const j = await r.json();
+        if (j.speech) { state.ai.speech = j.speech; setAiBadge(); }
         if (j.online && j.text) { input.value = j.text; doSpeechCheck(btn.closest(".speak-line").querySelector("[data-check]"), L); }
-        else { input.placeholder = "聞き取った内容を入力してチェック"; toast(j.note || "音声認識オフライン"); }
+        else {
+          input.placeholder = "聞き取った内容を入力してチェック";
+          const fb = btn.closest(".speak-line").querySelector("[data-fb]");
+          fb.classList.remove("hidden");
+          fb.innerHTML = `<b>音声認識に接続できません。</b><br><span class="muted">${esc(j.note || "音声認識オフライン")}</span>`;
+          toast(j.note || "音声認識オフライン");
+        }
       } catch { input.placeholder = "認識失敗。入力でチェックできます。"; }
     };
     mediaRec.start(); btn.classList.add("recording"); btn.textContent = "■ 停止";
@@ -690,7 +724,13 @@ function renderHeat(activity) {
 // ---------- PROFILE / SETTINGS ----------
 routes.profile = async () => {
   const p = state.profile = await api("/profile");
+  state.ai.speech = await api("/speech/status").catch(() => state.ai.speech || {});
+  setAiBadge();
   const styles = state.artStyles = state.artStyles || await api("/art-styles");
+  const speech = state.ai.speech || {};
+  const chatOk = !!state.ai.online;
+  const speechOk = !!speech.online;
+  const speechCache = speechOk ? (speech.cached ? "ダウンロード済み" : "未ダウンロード/初回準備") : "利用不可";
   const styleOpts = Object.entries(styles.presets).map(([k, s]) => `
     <div class="style-opt ${k === p.art_style ? "active" : ""}" data-style="${k}">
       <h4>${esc(s.name_ja)}</h4><p>${esc(s.description_ja)}</p></div>`).join("");
@@ -722,11 +762,29 @@ routes.profile = async () => {
     <div class="style-grid">${styleOpts}</div>
     <div style="margin-top:1.5rem"><button class="btn" id="saveProfile">保存する</button></div>
     <h2>AI接続（Foundry Local）</h2>
-    <div class="card" style="padding:1.1rem">
-      <div>状態：<b>${state.ai.online ? "接続中 ✓" : "未接続"}</b> ${state.ai.model ? `（${esc(state.ai.model)}）` : ""}</div>
-      <div class="sub" style="margin:.4rem 0 0">${esc(state.ai.note || "")}</div>
-      <p class="sub" style="margin:.6rem 0 0">翻訳・AI対話・発話チェックはローカルのFoundry Localで動作します。未接続でも事前収録の語彙・本文・音読・クイズは利用できます。</p>
-      <button class="btn sm ghost" id="reconnect" style="margin-top:.6rem">再接続を試す</button>
+    <div class="card ai-panel">
+      <div class="ai-row">
+        <div>
+          <div class="ai-kind">会話・翻訳・採点</div>
+          <div class="muted">${esc(state.ai.model || "モデル未確認")}</div>
+        </div>
+        <b class="${chatOk ? "ok-text" : "warn-text"}">${chatOk ? "接続中 ✓" : "未接続"}</b>
+      </div>
+      <div class="ai-note">${esc(state.ai.note || "")}</div>
+      <div class="ai-row">
+        <div>
+          <div class="ai-kind">音声認識（Whisper）</div>
+          <div class="muted">${esc(speech.model || "モデル未確認")} / ${esc(speechCache)}</div>
+        </div>
+        <b class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "利用可能 ✓" : "未接続"}</b>
+      </div>
+      <div class="ai-note">${esc(speech.note || "")}</div>
+      <p class="sub" style="margin:.8rem 0 0">録音して発話は音声認識（Whisper）で文字起こししたあと、会話・翻訳モデルで採点します。どちらの状態もここで確認できます。</p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.7rem">
+        <button class="btn sm ghost" id="reconnect">再接続を試す</button>
+        <button class="btn sm ghost" id="refreshSpeech">音声認識を確認</button>
+        <button class="btn sm" id="prepareAi">AI/Whisperを準備</button>
+      </div>
     </div>`;
 
   $$(".style-opt").forEach(o => o.addEventListener("click", () => {
@@ -753,6 +811,14 @@ routes.profile = async () => {
   });
   $("#reconnect").addEventListener("click", async () => {
     state.ai = await post("/ai/reconnect", {}); setAiBadge(); routes.profile();
+  });
+  $("#refreshSpeech").addEventListener("click", async () => {
+    state.ai.speech = await api("/speech/status"); setAiBadge(); routes.profile();
+  });
+  $("#prepareAi").addEventListener("click", async () => {
+    await post("/ai/setup", {});
+    toast("AI/Whisperの準備を開始しました");
+    initAiSetup();
   });
 };
 
@@ -813,7 +879,7 @@ async function initAiSetup() {
   const e = _setupEls();
   $("#setupSkip").addEventListener("click", () => { stopSetup(); e.box.classList.add("hidden"); });
   // If AI is already online and ready, skip entirely.
-  if (state.ai.online && state.ai.note === "ready") return;
+  if (state.ai.online && state.ai.note === "ready" && state.ai.speech?.online && state.ai.speech?.cached) return;
 
   let st;
   try { st = await post("/ai/setup", {}); }

@@ -37,7 +37,8 @@ FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "notneeded")
 # Model aliases. Foundry Local resolves an alias to the best variant for the
 # current hardware, so we keep them configurable.
 CHAT_MODEL = os.getenv("VIVE_CHAT_MODEL", "qwen2.5-1.5b")
-TRANSCRIBE_MODEL = os.getenv("VIVE_TRANSCRIBE_MODEL", "nemotron-speech-streaming-en-0.6b")
+# Speech-to-text uses a Whisper model via the SDK's file-based audio client.
+TRANSCRIBE_MODEL = os.getenv("VIVE_TRANSCRIBE_MODEL", "whisper-base")
 
 # Default port Foundry Local listens on when started manually.
 FOUNDRY_FALLBACK_URL = os.getenv("FOUNDRY_FALLBACK_URL", "http://localhost:5273/v1")

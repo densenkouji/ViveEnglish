@@ -54,6 +54,8 @@ pip install foundry-local-sdk          # macOS/Linux
 pip install foundry-local-sdk-winml    # Windows
 ```
 
+`run.bat` / `run.sh` で起動する場合は、SDK が未導入なら起動時に自動インストールを試みます。
+
 **ViveEnglish が起動時に空きポートを確保し、そのポートを指定して Foundry Local を起動します。**
 Foundry Local は起動のたびに動的ポートを使うため固定ポートだと繋がりませんが、本アプリは
 `foundry-local-sdk` の `Configuration(web={"urls": ...})` を使って**こちらが選んだポートで起動**するので、
@@ -62,11 +64,11 @@ Foundry Local は起動のたびに動的ポートを使うため固定ポート
 **やること（これだけ）**
 
 ```bash
-# 自動起動を有効にするため SDK を入れる
+# 手動で入れる場合
 pip install foundry-local-sdk-winml   # Windows / mac・Linux は foundry-local-sdk
 ```
 
-あとは `run.bat`（または `run.sh`）で ViveEnglish を起動するだけ。アプリが空きポートを選び、
+通常は `run.bat`（または `run.sh`）で ViveEnglish を起動するだけ。アプリが空きポートを選び、
 Foundry Local をそのポートで立ち上げて自動接続します。右上の「AI」インジケータが緑になれば接続完了。
 
 > 初回はチャット用モデルが未取得の場合があります。すでにキャッシュ済みなら自動ロードされます。
@@ -82,7 +84,7 @@ Foundry Local をそのポートで立ち上げて自動接続します。右上
 | `VIVE_FOUNDRY_HOST` | `127.0.0.1` | バインド先ホスト |
 | `VIVE_AUTOLOAD_MODEL` | `1` | キャッシュ済みチャットモデルを起動時に自動ロード |
 | `VIVE_CHAT_MODEL` | `qwen2.5-1.5b` | 翻訳・対話・採点に使うモデル（`foundry model list`で確認） |
-| `VIVE_TRANSCRIBE_MODEL` | `nemotron-speech-streaming-en-0.6b` | 発話の音声認識モデル |
+| `VIVE_TRANSCRIBE_MODEL` | `whisper-base` | 発話チェックの音声認識(STT)モデル。Whisper系を推奨（`whisper-tiny`/`small`等も可） |
 | `FOUNDRY_BASE_URL` | （未設定） | 外部で起動済みの Foundry Local に**手動接続**したいとき（指定すると自動起動より優先） |
 
 外部管理のサービスに繋ぐ場合のみ、`foundry service status` でURLを確認し

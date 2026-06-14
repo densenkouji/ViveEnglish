@@ -7,11 +7,9 @@ or simply:
 """
 from __future__ import annotations
 
-import io
-import wave
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -85,7 +83,8 @@ def health() -> dict[str, Any]:
 
 @app.post("/api/ai/reconnect")
 def ai_reconnect() -> dict[str, Any]:
-    return foundry.init()
+    foundry.init()
+    return foundry.status()
 
 
 @app.get("/api/ai/setup-state")
@@ -97,6 +96,12 @@ def ai_setup_state() -> dict[str, Any]:
 def ai_setup() -> dict[str, Any]:
     """Start (or report) the first-launch model/EP download."""
     return foundry.ensure_model_async()
+
+
+@app.get("/api/speech/status")
+def speech_status() -> dict[str, Any]:
+    foundry.init()
+    return foundry.speech_status(init_manager=True)
 
 
 # ---------------------------------------------------------------------------
@@ -161,64 +166,14 @@ def speech_check(req: SpeechReq) -> dict[str, Any]:
 
 @app.post("/api/speech/transcribe")
 async def transcribe(audio: UploadFile = File(...)) -> dict[str, Any]:
-    """Transcribe an uploaded WAV/PCM clip via Foundry Local live transcription.
+    """Transcribe an uploaded 16kHz mono WAV clip with a local Whisper model.
 
-    Browsers usually record WebM/Opus; the frontend converts to 16k mono WAV
-    via the Web Audio API before upload. If the SDK isn't available we return a
-    clear notice so the UI can ask the learner to type what they said instead.
+    The frontend records WebM/Opus and converts to 16k mono WAV via the Web
+    Audio API before upload. If STT is unavailable we return a clear notice so
+    the UI can ask the learner to type what they said instead.
     """
     data = await audio.read()
-    text = _transcribe_wav(data)
-    if text is None:
-        return {"online": False, "text": "",
-                "note": ("音声認識(Foundry Local)が利用できません。"
-                         "聞き取った内容を入力欄に打ち込んでチェックできます。")}
-    return {"online": True, "text": text}
-
-
-def _transcribe_wav(data: bytes) -> str | None:
-    """Best-effort transcription using the Foundry Local SDK if present."""
-    try:  # pragma: no cover - depends on local install + model
-        # Reuse the already-started managed manager (bound to our chosen port)
-        # when available, so we don't spin up a second service.
-        manager = foundry.get_manager()
-        if manager is None:
-            from foundry_local_sdk import Configuration, FoundryLocalManager  # type: ignore
-            cfg = Configuration(app_name="viveenglish")
-            FoundryLocalManager.initialize(cfg)
-            manager = FoundryLocalManager.instance
-        model = manager.catalog.get_model(config.TRANSCRIBE_MODEL)
-        if not model.is_cached:
-            model.download(lambda p: None)
-        model.load()
-        audio_client = model.get_audio_client()
-        session = audio_client.create_live_transcription_session()
-        session.settings.sample_rate = 16000
-        session.settings.channels = 1
-        session.settings.language = "en"
-        session.start()
-
-        pcm = _wav_to_pcm16(data)
-        chunk = 960  # bytes ~ 30ms @16k mono int16
-        out: list[str] = []
-        for i in range(0, len(pcm), chunk):
-            session.append(pcm[i:i + chunk])
-        for result in session.get_stream():
-            if result.is_final and result.content:
-                out.append(result.content[0].text)
-        session.stop()
-        model.unload()
-        return " ".join(out).strip()
-    except Exception:
-        return None
-
-
-def _wav_to_pcm16(data: bytes) -> bytes:
-    try:
-        with wave.open(io.BytesIO(data), "rb") as w:
-            return w.readframes(w.getnframes())
-    except Exception:
-        return data
+    return foundry.transcribe(data)
 
 
 # ---------------------------------------------------------------------------
