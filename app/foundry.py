@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import random
 import re
 import socket
 import tempfile
@@ -1435,10 +1436,55 @@ def chat_suggestions(history: list[dict[str, str]], scenario: str = "",
 # fresh longer passage is useful practice material when a local chat model is on.
 
 _READING_LENGTHS = {
-    "medium": "two paragraphs, about 170 to 220 words",
-    "long": "three paragraphs, about 260 to 340 words",
-    "exam": "three exam-style paragraphs, about 320 words, with a clear claim, evidence, and conclusion",
+    "medium": {
+        "paragraphs": 2,
+        "words": "about 170 to 220 words total",
+        "roles": "Paragraph 1 introduces the topic. Paragraph 2 explains examples/results and ends with a short conclusion.",
+    },
+    "long": {
+        "paragraphs": 3,
+        "words": "about 260 to 340 words total",
+        "roles": "Paragraph 1 introduces the topic. Paragraph 2 develops reasons/examples. Paragraph 3 explains results and concludes.",
+    },
+    "exam": {
+        "paragraphs": 3,
+        "words": "about 300 to 360 words total",
+        "roles": "Paragraph 1 states the issue/claim. Paragraph 2 gives evidence or a counterexample. Paragraph 3 develops the logical conclusion.",
+    },
 }
+
+_READING_ANGLES = [
+    {
+        "genre": "a school magazine article",
+        "angle": "a small conflict between convenience and responsibility",
+        "structure": "problem, concrete example, lesson learned",
+    },
+    {
+        "genre": "a short opinion essay",
+        "angle": "an unexpected benefit that appears after a challenge",
+        "structure": "claim, two reasons, cautious conclusion",
+    },
+    {
+        "genre": "a narrative report",
+        "angle": "one person's change of mind after meeting someone",
+        "structure": "situation, turning point, result",
+    },
+    {
+        "genre": "an explainer for young readers",
+        "angle": "how a hidden cause creates a visible result",
+        "structure": "question, cause-and-effect chain, advice",
+    },
+    {
+        "genre": "a community newsletter column",
+        "angle": "how different people solve the same problem in different ways",
+        "structure": "introduction, comparison, conclusion",
+    },
+    {
+        "genre": "an exam-style reading passage",
+        "angle": "why a common belief is only partly true",
+        "structure": "common belief, counterexample, balanced conclusion",
+    },
+]
 
 
 def generate_reading_passage(topic: str = "", level: str = "beginner",
@@ -1449,26 +1495,46 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
     deliberately structured so the frontend can still demonstrate every layer.
     """
     topic_txt = re.sub(r"\s+", " ", str(topic or "")).strip() or "technology and daily life"
-    len_desc = _READING_LENGTHS.get(length, _READING_LENGTHS["medium"])
+    plan = _READING_LENGTHS.get(length, _READING_LENGTHS["medium"])
+    para_count = int(plan["paragraphs"])
+    angle = random.choice(_READING_ANGLES)
+    seed = random.randint(1000, 9999)
     sys = (
         "You are an English reading-material writer for Japanese learners. "
-        f"Write {len_desc} for a {level} learner about \"{topic_txt}\". "
-        "Use clear paragraph roles: introduction, supporting details, and conclusion. "
+        f"Write EXACTLY {para_count} paragraphs ({plan['words']}) for a {level} learner "
+        f"about \"{topic_txt}\" as {angle['genre']}. "
+        f"Required paragraph roles: {plan['roles']} "
+        f"Use this unique angle: {angle['angle']}. "
+        f"Use this paragraph structure: {angle['structure']}. "
+        f"Variation seed: {seed}. Do not reuse stock examples about phones, studying desks, "
+        "or generic daily habits unless the topic explicitly asks for them. "
         "Include varied sentence patterns (SV, SVC, SVO, SVOO, SVOC), connectors, "
         "pronouns, reasons, causes, results, and demonstratives. "
+        "Make the situation, examples, nouns, and conclusion meaningfully different each time. "
         "The passage must be ENGLISH ONLY. Return ONLY JSON: "
         "{\"title\":\"short English title\", \"passage\":\"English passage\", "
+        "\"passage_paragraphs\":[\"paragraph 1\", \"paragraph 2\"], "
         "\"passage_ja\":\"natural Japanese translation of the whole passage\"}."
+        f" The passage_paragraphs array MUST contain exactly {para_count} English strings. "
+        "Separate paragraphs in passage with a blank line."
     )
     raw = _chat(
         [{"role": "system", "content": sys},
-         {"role": "user", "content": f"Topic: {topic_txt}\nLevel: {level}\nLength: {length}"}],
-        temperature=0.45, max_tokens=1200, json_mode=True,
+         {"role": "user", "content": (
+             f"Topic: {topic_txt}\nLevel: {level}\nLength: {length}\n"
+             f"Genre: {angle['genre']}\nAngle: {angle['angle']}\n"
+             f"Structure: {angle['structure']}\nSeed: {seed}"
+         )}],
+        temperature=0.85, max_tokens=1200, json_mode=True,
     )
     if raw:
         parsed = _safe_json(raw)
-        if parsed and parsed.get("passage"):
-            passage = _plain_text(str(parsed.get("passage", "")))
+        if parsed and (parsed.get("passage") or parsed.get("passage_paragraphs")):
+            para_items = parsed.get("passage_paragraphs")
+            passage = _reading_paragraphs_to_text(para_items) if isinstance(para_items, list) else ""
+            if not passage:
+                passage = _plain_text(str(parsed.get("passage", "")))
+            passage = _ensure_reading_paragraphs(passage, para_count)
             passage_ja = str(parsed.get("passage_ja", "")).strip()
             if passage and not _JP_CHARS.search(passage):
                 if not passage_ja or _looks_untranslated(passage, passage_ja):
@@ -1478,30 +1544,69 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
                         "passage": passage, "passage_ja": passage_ja, "note": ""}
         cleaned = _plain_text(raw)
         if cleaned and not _JP_CHARS.search(cleaned):
+            cleaned = _ensure_reading_paragraphs(cleaned, para_count)
             return {"online": True, "title": topic_txt.title(), "passage": cleaned,
                     "passage_ja": _ensure_reply_ja(cleaned, ""), "note": ""}
 
     fallback_topic = topic_txt if not _JP_CHARS.search(topic_txt) else "daily learning"
-    sample = _fallback_reading_passage(fallback_topic)
+    sample = _fallback_reading_passage(fallback_topic, length=length)
     return {"online": False, **sample,
             "note": "AIオフラインのため、構造が見えやすいサンプル英文を表示しています。"}
 
 
-def _fallback_reading_passage(topic: str) -> dict[str, str]:
+def _reading_paragraphs_to_text(value: list[Any]) -> str:
+    parts = []
+    for item in value:
+        text = _plain_text(str(item or ""))
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
+def _ensure_reading_paragraphs(text: str, target: int) -> str:
+    text = _plain_text(text)
+    if target <= 1 or not text:
+        return text
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if len(paragraphs) == target:
+        return "\n\n".join(paragraphs)
+    if len(paragraphs) > target:
+        head = paragraphs[:target - 1]
+        tail = " ".join(paragraphs[target - 1:])
+        return "\n\n".join(head + [tail])
+
+    sentences = [s.strip() for s in re.findall(r"[^.!?]+(?:[.!?]+|$)", text) if s.strip()]
+    if len(sentences) < target:
+        return "\n\n".join(paragraphs) if paragraphs else text
+    groups = []
+    base = len(sentences) // target
+    extra = len(sentences) % target
+    pos = 0
+    for i in range(target):
+        take = base + (1 if i < extra else 0)
+        groups.append(" ".join(sentences[pos:pos + take]))
+        pos += take
+        extra -= 1
+    return "\n\n".join(g for g in groups if g.strip())
+
+
+def _fallback_reading_passage(topic: str, length: str = "long") -> dict[str, str]:
     title = "A Small Change with a Big Effect"
-    passage = (
+    paragraphs = [
         f"Many people think about {topic} only when a problem appears, but small daily choices often shape the result. "
         "For example, a student may put a phone in another room before studying. "
         "This simple action makes the desk quieter and gives the student a better chance to focus. "
-        "Because there are fewer interruptions, the first ten minutes become easier, and that beginning often leads to deeper work.\n\n"
+        "Because there are fewer interruptions, the first ten minutes become easier, and that beginning often leads to deeper work.",
         "However, the change does not help everyone in the same way. "
         "Some learners need music, while others need silence. "
         "A teacher can show students several methods and call the best method a personal routine. "
-        "When students test those methods, they find the routine useful and keep it for a longer time.\n\n"
+        "When students test those methods, they find the routine useful and keep it for a longer time.",
         "Therefore, the most important point is not to copy another person's habit blindly. "
         "People should notice what helps them, choose one small action, and repeat it. "
-        "In conclusion, steady attention to cause and result can turn an ordinary habit into real progress."
-    )
+        "In conclusion, steady attention to cause and result can turn an ordinary habit into real progress.",
+    ]
+    count = int(_READING_LENGTHS.get(length, _READING_LENGTHS["long"])["paragraphs"])
+    passage = "\n\n".join(paragraphs[:count])
     passage_ja = (
         f"多くの人は問題が起きたときだけ{topic}について考えますが、日々の小さな選択が結果を形作ることがよくあります。"
         "たとえば、学生が勉強前にスマートフォンを別の部屋に置くことがあります。"

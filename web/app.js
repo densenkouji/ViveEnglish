@@ -1054,7 +1054,18 @@ const readingUI = {
   translationSource: "",
   note: "",
   initialized: false,
+  genCount: 0,
 };
+
+const READING_GENERATION_ANGLES = [
+  { angle: "a small problem in a local community", terms: ["community", "choice", "result"] },
+  { angle: "an unexpected discovery during a school project", terms: ["project", "discover", "explain"] },
+  { angle: "a disagreement that becomes a useful compromise", terms: ["opinion", "reason", "solution"] },
+  { angle: "a change in nature that affects people's daily decisions", terms: ["environment", "cause", "adapt"] },
+  { angle: "a new tool that helps some people but creates another issue", terms: ["technology", "benefit", "challenge"] },
+  { angle: "a cultural custom seen through a visitor's eyes", terms: ["culture", "notice", "meaning"] },
+  { angle: "a quiet personal habit that slowly changes someone's future", terms: ["habit", "progress", "confidence"] },
+];
 
 routes.reading = async () => {
   if (!readingUI.initialized) {
@@ -1187,11 +1198,12 @@ async function generateReadingPassage(level) {
   const btn = $("#genReading");
   const note = $("#readingAiNote");
   const label = btn.textContent;
+  readingUI.genCount += 1;
   btn.disabled = true; btn.textContent = "生成中…";
   note.textContent = "AIが読解練習用の長文を作成しています。";
   try {
     const r = await requestReadingPassage(level);
-    readingUI.text = r.passage || "";
+    readingUI.text = normalizeReadingParagraphs(r.passage || "", readingTargetParagraphs());
     readingUI.translation = r.passage_ja || "";
     readingUI.translationSource = readingUI.text;
     $("#readingText").value = readingUI.text;
@@ -1206,18 +1218,20 @@ async function generateReadingPassage(level) {
 }
 
 async function requestReadingPassage(level) {
+  const spec = readingGenerationSpec();
   try {
     return await post("/reading/passage", {
-      topic: readingUI.topic,
+      topic: readingUI.topic || "reading practice",
       level,
       length: readingUI.length,
     });
   } catch {
     // Older running servers may not have the dedicated endpoint yet. Reuse the
-    // existing vocabulary-story generator so the screen still works until restart.
+    // existing vocabulary-story generator with varied terms so the screen still
+    // works until restart.
     const story = await post("/words/story", {
-      words: readingTopicTerms(),
-      theme: readingUI.topic || "reading practice",
+      words: readingTopicTerms(spec),
+      theme: `${readingUI.topic || "reading practice"} - ${spec.angle} (variation ${spec.seed})`,
       level,
       format: "story",
       length: readingUI.length === "medium" ? "medium" : "long",
@@ -1225,18 +1239,60 @@ async function requestReadingPassage(level) {
     return {
       online: story.online,
       title: story.title || "",
-      passage: story.story || READING_DEFAULT_TEXT,
+      passage: normalizeReadingParagraphs(story.story || READING_DEFAULT_TEXT, readingTargetParagraphs()),
       passage_ja: story.story_ja || "",
       note: story.note || "既存の文章生成APIで長文を作成しました。アプリ再起動後は読解専用APIを使います。",
     };
   }
 }
 
-function readingTopicTerms() {
+function readingTargetParagraphs() {
+  return readingUI.length === "medium" ? 2 : 3;
+}
+
+function normalizeReadingParagraphs(text, target) {
+  const raw = String(text || "").trim();
+  if (!raw || target <= 1) return raw;
+  const paragraphs = raw.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (paragraphs.length === target) return paragraphs.join("\n\n");
+  if (paragraphs.length > target) {
+    return paragraphs.slice(0, target - 1).concat(paragraphs.slice(target - 1).join(" ")).join("\n\n");
+  }
+  const sentences = raw.match(/[^.!?]+(?:[.!?]+|$)/g)?.map(s => s.trim()).filter(Boolean) || [];
+  if (sentences.length < target) return paragraphs.join("\n\n") || raw;
+  const groups = [];
+  const base = Math.floor(sentences.length / target);
+  let extra = sentences.length % target;
+  let pos = 0;
+  for (let i = 0; i < target; i++) {
+    const take = base + (extra > 0 ? 1 : 0);
+    groups.push(sentences.slice(pos, pos + take).join(" "));
+    pos += take;
+    extra -= 1;
+  }
+  return groups.filter(Boolean).join("\n\n");
+}
+
+function readingGenerationSpec() {
+  const seed = `${Date.now().toString(36)}-${readingUI.genCount}`;
+  const idx = Math.abs(hashText(`${readingUI.topic}:${readingUI.length}:${seed}`)) % READING_GENERATION_ANGLES.length;
+  return { ...READING_GENERATION_ANGLES[idx], seed };
+}
+
+function hashText(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+  return h;
+}
+
+function readingTopicTerms(spec) {
   const terms = (readingUI.topic.match(/[A-Za-z]+(?:\s+[A-Za-z]+)?/g) || [])
     .map(t => t.trim().toLowerCase())
     .filter(t => t.length >= 4)
-    .slice(0, 3);
+    .slice(0, 2);
+  (spec?.terms || []).forEach(t => {
+    if (!terms.includes(t)) terms.push(t);
+  });
   return terms.length ? terms : ["reading", "learning"];
 }
 
