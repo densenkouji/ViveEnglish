@@ -9,6 +9,8 @@ env/
 
 # App data (local SQLite DB, generated at runtime)
 data/
+docs/
+looks/
 
 # PyInstaller / packaging output
 build/

@@ -256,18 +256,47 @@ def _strip_variant(s: str) -> str:
     return (s or "").split(":", 1)[0].strip().lower()
 
 
+def _model_ref_matches(ref: str | None, model_id: str | None, alias: str | None = "") -> bool:
+    """Return True when a preference/active model ref points at a catalog model."""
+    ref = (ref or "").strip().lower()
+    if not ref:
+        return False
+    candidates = []
+    for value in (model_id, alias):
+        value = (value or "").strip().lower()
+        if value:
+            candidates.append(value)
+            base = _strip_variant(value)
+            if base and base not in candidates:
+                candidates.append(base)
+    ref_base = _strip_variant(ref)
+    refs = [ref]
+    if ref_base and ref_base != ref:
+        refs.append(ref_base)
+    for r in refs:
+        for c in candidates:
+            if r == c:
+                return True
+            # Foundry often reports a concrete variant id where the setting uses
+            # a short alias. Treat prefix/contains matches as the same model,
+            # but only after exact checks so unrelated empty strings never match.
+            if len(r) >= 4 and len(c) >= 4 and (
+                c.startswith(r) or r.startswith(c) or r in c or c in r
+            ):
+                return True
+    return False
+
+
 def _pick_chat_model(ids: list[str], manager=None) -> str | None:
     """Choose a text/chat-completion model, never a vision/embedding/audio one."""
     if not ids:
         return None
     alias = eff_chat_model().lower()
-    alias_base = _strip_variant(alias)
     # 1) configured model — match ignoring the ':<n>' variant suffix on either
     # side, since /v1/models reports ids without it but prefs may carry it.
     preferred = [m for m in ids
                  if not _NON_CHAT.search(m)
-                 and (alias in m.lower() or _strip_variant(m) == alias_base
-                      or m.lower() == alias)]
+                 and _model_ref_matches(alias, m)]
     if preferred:
         return preferred[0]
     # 2) drop clearly non-chat models
@@ -295,11 +324,7 @@ def _resolve_configured_model(ids: list[str], configured: str) -> str | None:
     if not key:
         return None
     for mid in ids:
-        if mid.lower() == key:
-            return mid
-    for mid in ids:
-        m = mid.lower()
-        if m.startswith(key) or key in m:
+        if _model_ref_matches(key, mid):
             return mid
     return configured
 
@@ -928,18 +953,31 @@ def list_models() -> dict[str, Any]:
 
     {"online": bool, "note": str,
      "selected": {"chat":..., "translate":..., "transcribe":...},
-     "models": [{"id","alias","task","kind","cached","loaded"}]}
+     "current": {"chat":..., "translate":..., "transcribe":...},
+     "models": [{"id","alias","task","kind","cached","loaded",
+                 "selected_kinds","active_kinds"}]}
     """
     selected = {
         "chat": eff_chat_model(),
         "translate": eff_translate_model(),
         "transcribe": eff_transcribe_model(),
     }
+    speech = speech_status()
+    chat_active = bool(_status.get("online"))
+    speech_active = bool(speech.get("online") and speech.get("cached"))
+    current = {
+        "chat": (_model or str(_status.get("model") or "")) if chat_active else "",
+        "translate": (_translate_model or str(_status.get("translate_model") or "")) if chat_active else "",
+        "transcribe": str(speech.get("model") or "") if speech_active else "",
+    }
+    status_snapshot = _base_status()
+    status_snapshot["speech"] = speech
     mgr, err = _sdk_manager(initialize=True)
     if mgr is None:
         return {"online": False,
                 "note": "Foundry Local SDK が利用できないため、モデル一覧を取得できません。",
-                "detail": err or "", "selected": selected, "models": []}
+                "detail": err or "", "selected": selected, "current": current,
+                "status": status_snapshot, "models": []}
 
     loaded_ids: set[str] = set()
     try:
@@ -954,29 +992,42 @@ def list_models() -> dict[str, Any]:
     models = []
     try:
         for m, mid in _iter_catalog(mgr):
+            alias = getattr(m, "alias", "") or ""
             task = (getattr(m, "task", "") or getattr(m, "task_type", "") or "")
+            selected_kinds = [
+                kind for kind, ref in selected.items()
+                if ref and _model_ref_matches(ref, mid, alias)
+            ]
+            active_kinds = [
+                kind for kind, ref in current.items()
+                if ref and _model_ref_matches(ref, mid, alias)
+            ]
             models.append({
                 "id": mid,
-                "alias": getattr(m, "alias", "") or "",
+                "alias": alias,
                 "task": str(task),
                 "kind": _model_kind(mid),
                 "cached": bool(getattr(m, "is_cached", False)),
-                "loaded": mid in loaded_ids,
+                "loaded": any(_model_ref_matches(lid, mid, alias) for lid in loaded_ids),
+                "selected_kinds": selected_kinds,
+                "active_kinds": active_kinds,
             })
     except Exception as exc:
         return {"online": True, "note": f"モデル一覧の取得に失敗しました: {exc}",
-                "selected": selected, "models": []}
+                "selected": selected, "current": current,
+                "status": status_snapshot, "models": []}
 
     models.sort(key=lambda x: (x["kind"] != "chat", not x["cached"], x["id"]))
-    return {"online": True, "note": "", "selected": selected, "models": models}
+    return {"online": True, "note": "", "selected": selected,
+            "current": current, "status": status_snapshot, "models": models}
 
 
 def download_model_async(alias: str, *, kind: str = "chat") -> dict[str, Any]:
-    """Download (and load chat/translate) a catalog model in the background.
+    """Download a catalog model in the background.
 
     Reuses the _setup progress channel so the existing /api/ai/setup-state
-    polling and overlay show the download. ``kind`` controls the label and
-    whether the model is loaded into the chat client afterwards.
+    polling and overlay show the download. Chat/translate models are loaded only
+    when they already match the configured model preference.
     """
     global _setup_thread
     alias = (alias or "").strip()
@@ -1022,12 +1073,10 @@ def _find_catalog_model(manager, ident: str):
     except Exception:
         pass
     # 3) Scan the catalog matching id/alias (and a base alias without ':<n>').
-    key = ident.lower()
+    key = (ident or "").lower()
     base = key.split(":", 1)[0]
     for m, mid in _iter_catalog(manager):
-        low = mid.lower()
-        malias = (getattr(m, "alias", "") or "").lower()
-        if low == key or malias == key or low == base or malias == base:
+        if _model_ref_matches(key, mid, getattr(m, "alias", "") or ""):
             return m
     # 4) Last resort: alias form derived from the base id.
     if base and base != key:
@@ -1055,12 +1104,18 @@ def _run_download(alias: str, kind: str) -> None:
                                "モデル名を確認してください。")
             return
         mid = getattr(model, "id", "") or alias
+        model_alias = getattr(model, "alias", "") or alias
         if not getattr(model, "is_cached", False):
             _set_setup(state="downloading", phase="model", progress=0, model=mid,
                        message=f"{label}（{alias}）をダウンロード中…")
             model.download(lambda p: _safe_progress(p))
-        # Load chat/translate models so they're ready to serve immediately.
-        if kind in ("chat", "translate") and _model_kind(mid) != "speech":
+        selected_refs = [eff_chat_model(), eff_translate_model()]
+        should_load = (
+            kind in ("chat", "translate") and _model_kind(mid) != "speech"
+            and any(_model_ref_matches(ref, mid, model_alias)
+                    for ref in selected_refs if ref)
+        )
+        if should_load:
             _set_setup(state="loading", phase="model", progress=100, model=mid,
                        message=f"{label}を読み込んでいます…")
             model.load()
@@ -1069,8 +1124,9 @@ def _run_download(alias: str, kind: str) -> None:
                    message=f"{label}の準備に失敗しました: {exc}. "
                            f"`foundry model run {alias}` を一度お試しください。")
         return
-    # Refresh the chat client so a freshly downloaded model is picked up.
-    if kind in ("chat", "translate"):
+    # Refresh the chat client only when the download was already the selected
+    # model. Downloading a catalog item should not silently switch the app.
+    if kind in ("chat", "translate") and locals().get("should_load"):
         init()
     _set_setup(state="ready", progress=100, phase="done",
                message=f"{label}（{alias}）の準備が完了しました。")
@@ -1374,6 +1430,87 @@ def chat_suggestions(history: list[dict[str, str]], scenario: str = "",
     }
 
 
+# --- Reading passage generation -------------------------------------------
+# The reading assistant can analyse pasted text without AI, but generating a
+# fresh longer passage is useful practice material when a local chat model is on.
+
+_READING_LENGTHS = {
+    "medium": "two paragraphs, about 170 to 220 words",
+    "long": "three paragraphs, about 260 to 340 words",
+    "exam": "three exam-style paragraphs, about 320 words, with a clear claim, evidence, and conclusion",
+}
+
+
+def generate_reading_passage(topic: str = "", level: str = "beginner",
+                             length: str = "medium") -> dict[str, Any]:
+    """Generate an English passage for the reading-support screen.
+
+    Returns {online, title, passage, passage_ja, note}. The fallback sample is
+    deliberately structured so the frontend can still demonstrate every layer.
+    """
+    topic_txt = re.sub(r"\s+", " ", str(topic or "")).strip() or "technology and daily life"
+    len_desc = _READING_LENGTHS.get(length, _READING_LENGTHS["medium"])
+    sys = (
+        "You are an English reading-material writer for Japanese learners. "
+        f"Write {len_desc} for a {level} learner about \"{topic_txt}\". "
+        "Use clear paragraph roles: introduction, supporting details, and conclusion. "
+        "Include varied sentence patterns (SV, SVC, SVO, SVOO, SVOC), connectors, "
+        "pronouns, reasons, causes, results, and demonstratives. "
+        "The passage must be ENGLISH ONLY. Return ONLY JSON: "
+        "{\"title\":\"short English title\", \"passage\":\"English passage\", "
+        "\"passage_ja\":\"natural Japanese translation of the whole passage\"}."
+    )
+    raw = _chat(
+        [{"role": "system", "content": sys},
+         {"role": "user", "content": f"Topic: {topic_txt}\nLevel: {level}\nLength: {length}"}],
+        temperature=0.45, max_tokens=1200, json_mode=True,
+    )
+    if raw:
+        parsed = _safe_json(raw)
+        if parsed and parsed.get("passage"):
+            passage = _plain_text(str(parsed.get("passage", "")))
+            passage_ja = str(parsed.get("passage_ja", "")).strip()
+            if passage and not _JP_CHARS.search(passage):
+                if not passage_ja or _looks_untranslated(passage, passage_ja):
+                    passage_ja = _ensure_reply_ja(passage, "")
+                return {"online": True,
+                        "title": str(parsed.get("title", "")).strip(),
+                        "passage": passage, "passage_ja": passage_ja, "note": ""}
+        cleaned = _plain_text(raw)
+        if cleaned and not _JP_CHARS.search(cleaned):
+            return {"online": True, "title": topic_txt.title(), "passage": cleaned,
+                    "passage_ja": _ensure_reply_ja(cleaned, ""), "note": ""}
+
+    fallback_topic = topic_txt if not _JP_CHARS.search(topic_txt) else "daily learning"
+    sample = _fallback_reading_passage(fallback_topic)
+    return {"online": False, **sample,
+            "note": "AIオフラインのため、構造が見えやすいサンプル英文を表示しています。"}
+
+
+def _fallback_reading_passage(topic: str) -> dict[str, str]:
+    title = "A Small Change with a Big Effect"
+    passage = (
+        f"Many people think about {topic} only when a problem appears, but small daily choices often shape the result. "
+        "For example, a student may put a phone in another room before studying. "
+        "This simple action makes the desk quieter and gives the student a better chance to focus. "
+        "Because there are fewer interruptions, the first ten minutes become easier, and that beginning often leads to deeper work.\n\n"
+        "However, the change does not help everyone in the same way. "
+        "Some learners need music, while others need silence. "
+        "A teacher can show students several methods and call the best method a personal routine. "
+        "When students test those methods, they find the routine useful and keep it for a longer time.\n\n"
+        "Therefore, the most important point is not to copy another person's habit blindly. "
+        "People should notice what helps them, choose one small action, and repeat it. "
+        "In conclusion, steady attention to cause and result can turn an ordinary habit into real progress."
+    )
+    passage_ja = (
+        f"多くの人は問題が起きたときだけ{topic}について考えますが、日々の小さな選択が結果を形作ることがよくあります。"
+        "たとえば、学生が勉強前にスマートフォンを別の部屋に置くことがあります。"
+        "この単純な行動は机を静かにし、集中する機会を増やします。"
+        "邪魔が少ないので最初の10分が楽になり、その始まりがより深い作業につながることがよくあります。"
+    )
+    return {"title": title, "passage": passage, "passage_ja": passage_ja}
+
+
 def check_speech(target: str, said: str, level: str = "beginner") -> dict[str, Any]:
     """Compare what the learner said (from transcription) to the target line."""
     target = (target or "").strip()
@@ -1422,8 +1559,8 @@ def check_speech(target: str, said: str, level: str = "beginner") -> dict[str, A
 
 
 # --- Vocabulary story generation -------------------------------------------
-# Turn the learner's saved words into a short, themed passage so they can see
-# their vocabulary used naturally in context.
+# Turn the learner's chosen words and phrases into a short, themed passage so
+# they can see target vocabulary used naturally in context.
 
 _STORY_FORMATS = {
     "story": "a short, coherent story",
@@ -1435,26 +1572,39 @@ _STORY_FORMATS = {
 _STORY_FORMATS_JA = {
     "story": "物語", "dialogue": "会話", "diary": "日記", "email": "メール",
 }
+
+
 def _force_english_story(words: list[str], theme: str, level: str,
                          fmt_desc: str, len_desc: str) -> str:
     """Second-pass generation that returns ONLY an English passage (no JSON).
 
-    Used when the first JSON attempt put Japanese in the English ``story`` field.
+    Used when the first JSON attempt put Japanese in the English ``story`` field
+    or skipped required target terms.
     """
-    word_list = ", ".join(words)
-    sys = (
-        f"Write {fmt_desc} ({len_desc}) in ENGLISH ONLY for a Japanese {level} "
-        f"English learner, on the theme \"{theme}\". Use ALL of these words "
-        f"naturally: {word_list}. Output ONLY the English passage as plain text — "
-        "no Japanese, no labels, no JSON, no quotes."
-    )
-    raw = _chat(
-        [{"role": "system", "content": sys},
-         {"role": "user", "content": f"Words: {word_list}\nTheme: {theme}"}],
-        temperature=0.6, max_tokens=600,
-    )
-    text = _plain_text(raw or "")
-    return text if text and not _is_mostly_japanese(text) else ""
+    required_lines = "\n".join(f"- {w}" for w in words)
+    missing_hint = ""
+    for attempt in range(2):
+        sys = (
+            f"Write {fmt_desc} ({len_desc}) in ENGLISH ONLY for a Japanese {level} "
+            f"English learner, on the theme \"{theme}\". You MUST include every "
+            "required term exactly as written at least once. Do not translate, "
+            "inflect, replace, or omit any required term. Output ONLY the English "
+            "passage as plain text: no Japanese, no labels, no JSON, no quotes."
+        )
+        if attempt:
+            sys += missing_hint or " This is a retry because the previous answer missed required terms."
+        raw = _chat(
+            [{"role": "system", "content": sys},
+             {"role": "user", "content": f"Required terms:\n{required_lines}\nTheme: {theme}"}],
+            temperature=0.2, max_tokens=800,
+        )
+        text = _plain_text(raw or "")
+        if _valid_story_text(text, words):
+            return text
+        missing = _story_missing_terms(text, words)
+        if missing:
+            missing_hint = " This is a retry. The previous answer missed: " + ", ".join(missing) + "."
+    return ""
 
 
 _STORY_LENGTHS = {
@@ -1466,30 +1616,42 @@ _STORY_LENGTHS = {
 
 def generate_story(words: list[str], theme: str = "", level: str = "beginner",
                    fmt: str = "story", length: str = "short") -> dict[str, Any]:
-    """Write a short, themed English passage that uses the learner's words.
+    """Write a short, themed English passage that uses the learner's terms.
 
     Returns {online, title, story, story_ja, used_words, vocab_notes, note}.
     Falls back to a clear OFFLINE notice (rest of the UI keeps working).
     """
-    words = [str(w).strip() for w in (words or []) if str(w).strip()]
+    seen_words = set()
+    clean_words = []
+    for raw in words or []:
+        word = re.sub(r"\s+", " ", str(raw)).strip()
+        key = word.lower()
+        if word and key not in seen_words:
+            seen_words.add(key)
+            clean_words.append(word)
+    words = clean_words
     if not words:
         return {"online": _status["online"], "title": "", "story": "",
                 "story_ja": "", "used_words": [], "vocab_notes": [],
-                "note": "単語帳から単語を1つ以上選んでください。"}
+                "note": "単語やフレーズを1つ以上選んでください。"}
 
     fmt_desc = _STORY_FORMATS.get(fmt, _STORY_FORMATS["story"])
     len_desc = _STORY_LENGTHS.get(length, _STORY_LENGTHS["short"])
     theme_txt = (theme or "").strip() or "an everyday situation"
     word_list = ", ".join(words)
+    required_lines = "\n".join(f"- {w}" for w in words)
 
     sys = (
         f"You are an English teacher writing practice material for a Japanese "
         f"{level} learner. Write {fmt_desc} ({len_desc}) on the theme: "
-        f"\"{theme_txt}\". You MUST use ALL of these vocabulary words naturally "
-        f"and correctly: {word_list}. Keep the English natural and suited to the "
+        f"\"{theme_txt}\". You MUST use EVERY required term naturally and "
+        f"correctly: {word_list}. Copy each required term exactly as written at "
+        "least once in the English story. Do not translate, inflect, replace, or "
+        "omit required terms. Keep the English natural and suited to the "
         "learner's level, and make the theme clearly recognisable. "
         "CRITICAL: the \"story\" field MUST be written in ENGLISH only — never in "
-        "Japanese. The \"story_ja\" field is the Japanese translation of that "
+        "Japanese, and not mixed Japanese/English. The \"story_ja\" field is the "
+        "Japanese translation of that "
         "English passage. Do not swap them. "
         "Return ONLY JSON: {\"title\":\"a short English title\", "
         "\"story\":\"the passage IN ENGLISH\", "
@@ -1499,8 +1661,8 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
     )
     raw = _chat(
         [{"role": "system", "content": sys},
-         {"role": "user", "content": f"Words: {word_list}\nTheme: {theme_txt}"}],
-        temperature=0.7, max_tokens=700, json_mode=True,
+         {"role": "user", "content": f"Required terms:\n{required_lines}\nTheme: {theme_txt}"}],
+        temperature=0.4, max_tokens=1000, json_mode=True,
     )
     if raw:
         parsed = _safe_json(raw)
@@ -1512,12 +1674,14 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
             # un-swap them so the learner always sees an English passage.
             if _is_mostly_japanese(story) and story_ja and not _is_mostly_japanese(story_ja):
                 story, story_ja = story_ja, story
-            # If story is still Japanese (no usable English anywhere), regenerate
-            # it plainly in English so we never show a Japanese "story".
-            if _is_mostly_japanese(story):
+            # If story still contains Japanese or misses required terms,
+            # regenerate plainly in English so we never show invalid practice text.
+            if not _valid_story_text(story, words):
                 regenerated = _force_english_story(words, theme_txt, level, fmt_desc, len_desc)
                 if regenerated:
                     story, story_ja = regenerated, ""
+            if not _valid_story_text(story, words):
+                return _story_generation_failed(words, story)
             if not story_ja or _looks_untranslated(story, story_ja):
                 story_ja = _ensure_reply_ja(story, "")
             notes = parsed.get("vocab_notes")
@@ -1534,8 +1698,10 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
                     "used_words": used or words, "vocab_notes": clean_notes, "note": ""}
         cleaned = _plain_text(raw)
         if cleaned:
-            if _is_mostly_japanese(cleaned):
+            if not _valid_story_text(cleaned, words):
                 cleaned = _force_english_story(words, theme_txt, level, fmt_desc, len_desc) or cleaned
+            if not _valid_story_text(cleaned, words):
+                return _story_generation_failed(words, cleaned)
             return {"online": True, "title": "", "story": cleaned,
                     "story_ja": _ensure_reply_ja(cleaned, ""),
                     "used_words": words, "vocab_notes": [], "note": ""}
@@ -1543,7 +1709,56 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
     return {"online": False, "title": "", "story": "", "story_ja": "",
             "used_words": words, "vocab_notes": [],
             "note": "AIオフラインのため文章を生成できません。Foundry Local を起動すると、"
-                    "登録した単語を使ったオリジナルの文章を作れます。"}
+                    "指定した単語やフレーズを使ったオリジナルの文章を作れます。"}
+
+
+def _valid_story_text(story: str, required_terms: list[str]) -> bool:
+    """True only for English-only story text that includes all required terms."""
+    story = (story or "").strip()
+    if not story:
+        return False
+    # The story field is practice English. Any Japanese character here means the
+    # model ignored the contract, even if the text is not "mostly" Japanese.
+    if _JP_CHARS.search(story):
+        return False
+    return not _story_missing_terms(story, required_terms)
+
+
+def _story_generation_failed(required_terms: list[str], story: str = "") -> dict[str, Any]:
+    missing = _story_missing_terms(story, required_terms)
+    if missing:
+        detail = " 未使用: " + ", ".join(missing[:6])
+    else:
+        detail = ""
+    return {"online": True, "title": "", "story": "", "story_ja": "",
+            "used_words": [], "vocab_notes": [],
+            "note": "指定した単語やフレーズをすべて含む英語の文章を生成できませんでした。"
+                    "もう一度生成してください。" + detail}
+
+
+def _story_missing_terms(story: str, required_terms: list[str]) -> list[str]:
+    text = _story_match_text(story)
+    missing = []
+    for term in required_terms:
+        term_txt = _story_match_text(term)
+        if term_txt and not _story_contains_term(text, term_txt):
+            missing.append(term)
+    return missing
+
+
+def _story_match_text(value: str) -> str:
+    text = _norm_text(str(value or "")).lower()
+    return (text.replace("’", "'").replace("‘", "'")
+            .replace("“", '"').replace("”", '"'))
+
+
+def _story_contains_term(text: str, term: str) -> bool:
+    pattern = re.escape(term).replace(r"\ ", r"\s+")
+    if re.match(r"[a-z0-9']", term):
+        pattern = r"(?<![a-z0-9'])" + pattern
+    if re.search(r"[a-z0-9']$", term):
+        pattern += r"(?![a-z0-9'])"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
 # --- Small utilities -------------------------------------------------------

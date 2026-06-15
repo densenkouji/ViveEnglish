@@ -88,6 +88,12 @@ class StoryReq(BaseModel):
     length: str = "short"        # short|medium|long
 
 
+class ReadingPassageReq(BaseModel):
+    topic: str = ""
+    level: str = "beginner"
+    length: str = "medium"       # medium|long|exam
+
+
 class ModelSelectReq(BaseModel):
     kind: str            # chat|translate|transcribe
     alias: str | None = None   # empty/None resets to the configured default
@@ -278,13 +284,24 @@ def remove_word(word: str) -> dict[str, Any]:
 
 @app.post("/api/words/story")
 def words_story(req: StoryReq) -> dict[str, Any]:
-    """Generate a short, themed passage that uses the learner's saved words."""
+    """Generate a short, themed passage that uses the learner's target terms."""
     result = foundry.generate_story(
         req.words, theme=req.theme, level=req.level,
         fmt=req.format, length=req.length,
     )
     if result.get("online"):
         database.log_activity("study", detail=f"story:{req.theme[:80]}")
+    return result
+
+
+@app.post("/api/reading/passage")
+def reading_passage(req: ReadingPassageReq) -> dict[str, Any]:
+    """Generate a long-ish English passage for the reading assistant."""
+    result = foundry.generate_reading_passage(
+        req.topic, level=req.level, length=req.length,
+    )
+    if result.get("passage"):
+        database.log_activity("study", detail=f"reading:{req.topic[:80]}")
     return result
 
 

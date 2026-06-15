@@ -151,6 +151,7 @@ routes.home = () => {
       読む・聞く・話すをAIと一緒に練習します。わからない単語はタップするだけで和訳。</p>
       <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1rem">
         <button class="btn" onclick="location.hash='#lessons'">学習を始める</button>
+        <button class="btn accent" onclick="location.hash='#reading'">長文を読む</button>
         <button class="btn ghost" onclick="location.hash='#progress'">進捗を見る</button>
       </div>
     </div>
@@ -793,7 +794,7 @@ const STORY_THEME_PRESETS = [
   "週末の過ごし方", "日本文化の紹介", "友だちとの会話", "将来の夢",
 ];
 // Keeps the selected word set and options across re-renders within the screen.
-const wordsUI = { selected: new Set(), theme: "", format: "story", length: "short" };
+const wordsUI = { selected: new Set(), customTerms: "", theme: "", format: "story", length: "short" };
 
 routes.words = async () => {
   const data = await api("/progress");
@@ -823,10 +824,11 @@ routes.words = async () => {
     `<button class="seg ${wordsUI.format === f.key ? "active" : ""}" data-fmt="${f.key}">${f.label}</button>`).join("");
   const lenBtns = STORY_LENGTHS.map(l =>
     `<button class="seg ${wordsUI.length === l.key ? "active" : ""}" data-len="${l.key}">${esc(l.label)}</button>`).join("");
+  const customCount = parseStoryTerms(wordsUI.customTerms).length;
 
   $("#app").innerHTML = `
     <h1>マイ単語帳</h1>
-    <p class="sub">保存した単語を復習し、選んだ単語を使ったオリジナルの文章をAIに作ってもらえます。</p>
+    <p class="sub">保存した単語を復習し、選んだ単語や入力した語句を使ったオリジナルの文章をAIに作ってもらえます。</p>
 
     <div class="words-layout">
       <section>
@@ -842,7 +844,10 @@ routes.words = async () => {
 
       <section class="card gen-panel">
         <h2 style="margin-top:0">📝 単語から文章を作る</h2>
-        <p class="muted" style="margin:.2rem 0 .9rem">選んだ単語（<b id="pickCount">${wordsUI.selected.size}</b>個）を使い、テーマに沿った英文と和訳を生成します。</p>
+        <p class="muted" style="margin:.2rem 0 .9rem">選んだ単語（<b id="pickCount">${wordsUI.selected.size}</b>個）と追加語句（<b id="customCount">${customCount}</b>個）を使い、テーマに沿った英文と和訳を生成します。</p>
+
+        <div class="field-label">追加する単語・フレーズ</div>
+        <textarea id="customWords" class="term-input" rows="3" placeholder="例：take off, get along with, curious">${esc(wordsUI.customTerms)}</textarea>
 
         <div class="field-label">テーマ</div>
         <input id="storyTheme" class="theme-input" placeholder="例：旅行先での出来事（自由入力）" value="${esc(wordsUI.theme)}" />
@@ -864,6 +869,10 @@ routes.words = async () => {
     $("#pickCount").textContent = wordsUI.selected.size;
     $$(".word-row", wordList).forEach(r =>
       r.classList.toggle("picked", wordsUI.selected.has(r.dataset.word)));
+  };
+  const customInput = $("#customWords");
+  const refreshCustomUI = () => {
+    $("#customCount").textContent = parseStoryTerms(wordsUI.customTerms).length;
   };
 
   wordList.addEventListener("click", async e => {
@@ -894,6 +903,11 @@ routes.words = async () => {
     refreshPickUI();
   });
 
+  customInput.addEventListener("input", () => {
+    wordsUI.customTerms = customInput.value;
+    refreshCustomUI();
+  });
+
   const themeInput = $("#storyTheme");
   themeInput.addEventListener("input", () => { wordsUI.theme = themeInput.value; });
   $$("[data-themechip]").forEach(c => c.addEventListener("click", () => {
@@ -913,9 +927,9 @@ routes.words = async () => {
 };
 
 async function generateStory() {
-  const picked = [...wordsUI.selected];
+  const picked = storyTargetWords();
   const out = $("#storyOut");
-  if (!picked.length) { toast("単語を1つ以上選んでください。"); return; }
+  if (!picked.length) { toast("単語やフレーズを1つ以上選んでください。"); return; }
   const btn = $("#genStory");
   btn.disabled = true; const label = btn.textContent; btn.textContent = "生成中…";
   out.innerHTML = `<div class="muted">AIが「${esc(wordsUI.theme || "おまかせ")}」のテーマで文章を作成中…</div>`;
@@ -959,6 +973,34 @@ async function generateStory() {
   }
 }
 
+function parseStoryTerms(value) {
+  const terms = [];
+  const seen = new Set();
+  String(value || "").split(/[\n,、;；]+/).forEach(raw => {
+    const term = raw.trim().replace(/\s+/g, " ");
+    const key = term.toLowerCase();
+    if (term && !seen.has(key)) {
+      seen.add(key);
+      terms.push(term);
+    }
+  });
+  return terms;
+}
+
+function storyTargetWords() {
+  const terms = [];
+  const seen = new Set();
+  [...wordsUI.selected, ...parseStoryTerms(wordsUI.customTerms)].forEach(raw => {
+    const term = String(raw || "").trim().replace(/\s+/g, " ");
+    const key = term.toLowerCase();
+    if (term && !seen.has(key)) {
+      seen.add(key);
+      terms.push(term);
+    }
+  });
+  return terms;
+}
+
 // Wrap any of the learner's target words found in the passage with a highlight.
 function highlightWords(text, words) {
   const safe = esc(text);
@@ -991,9 +1033,399 @@ function renderHeat(activity) {
   $("#heat").innerHTML = cells.join("");
 }
 
+// ---------- READING SUPPORT ----------
+const READING_DEFAULT_TEXT = `Many students feel nervous when they see a long English passage. However, a passage is usually easier to understand when readers look for its structure first. The first paragraph often introduces the topic, and later paragraphs add reasons, examples, or results. This habit gives readers a map before they try to translate every word.
+
+For example, if a sentence begins with because, it probably explains a reason. If another sentence includes therefore or as a result, it probably shows a conclusion or effect. Pronouns such as it, they, and this also matter because they point back to earlier ideas. When readers connect those signals, they can follow the writer's thinking more calmly.
+
+In conclusion, good reading is not only about knowing many words. Readers should find the subject and verb, notice the sentence pattern, and check how each paragraph works. These small steps make a long passage clearer and help learners read with more confidence.`;
+
+const READING_LENGTHS = [
+  { key: "medium", label: "標準（2段落）" },
+  { key: "long", label: "長め（3段落）" },
+  { key: "exam", label: "試験風（論理展開）" },
+];
+
+const readingUI = {
+  text: "",
+  topic: "daily habits and learning",
+  length: "medium",
+  translation: "",
+  note: "",
+};
+
+routes.reading = async () => {
+  if (!readingUI.text) readingUI.text = READING_DEFAULT_TEXT;
+  const level = (state.profile && state.profile.level) || "beginner";
+  const lenBtns = READING_LENGTHS.map(l =>
+    `<button class="seg ${readingUI.length === l.key ? "active" : ""}" data-readlen="${l.key}">${esc(l.label)}</button>`).join("");
+
+  $("#app").innerHTML = `
+    <h1>長文読解サポート</h1>
+    <p class="sub">英文を入力するか、AIで長文を生成すると、文構造・5文型・段落の役割・重要シグナルを色分けして読めます。</p>
+
+    <div class="reading-layout">
+      <section class="reading-input">
+        <div class="reading-toolbar">
+          <input id="readingTopic" class="theme-input" value="${esc(readingUI.topic)}" placeholder="AI生成テーマ：環境問題、学校生活、テクノロジーなど" />
+          <div class="seg-row" id="readingLenRow">${lenBtns}</div>
+        </div>
+        <textarea id="readingText" class="reading-textarea" rows="12" spellcheck="false">${esc(readingUI.text)}</textarea>
+        <div class="reading-actions">
+          <button class="btn" id="analyzeReading">解析する</button>
+          <button class="btn accent" id="genReading">AIで長文を生成</button>
+          <button class="btn ghost sm" id="sampleReading">サンプル</button>
+          <button class="btn ghost sm" id="clearReading">クリア</button>
+        </div>
+        <div id="readingAiNote" class="muted">${esc(readingUI.note)}</div>
+        ${readingUI.translation ? `
+          <div class="reading-ja-box">
+            <button class="mini" id="toggleReadingJa">和訳を表示</button>
+            <div class="reading-ja hidden">${esc(readingUI.translation)}</div>
+          </div>` : ""}
+      </section>
+
+      <section class="reading-result" id="readingResult"></section>
+    </div>`;
+
+  $("#readingText").addEventListener("input", e => { readingUI.text = e.target.value; });
+  $("#readingTopic").addEventListener("input", e => { readingUI.topic = e.target.value; });
+  $("#readingLenRow").addEventListener("click", e => {
+    const b = e.target.closest("[data-readlen]"); if (!b) return;
+    readingUI.length = b.dataset.readlen;
+    $$("#readingLenRow .seg").forEach(x => x.classList.toggle("active", x === b));
+  });
+  $("#analyzeReading").addEventListener("click", () => {
+    readingUI.text = $("#readingText").value.trim();
+    if (!readingUI.text) { toast("解析する英文を入力してください。"); return; }
+    renderReadingAnalysis(readingUI.text);
+  });
+  $("#sampleReading").addEventListener("click", () => {
+    readingUI.text = READING_DEFAULT_TEXT; readingUI.translation = "";
+    readingUI.note = "";
+    $("#readingText").value = readingUI.text;
+    renderReadingAnalysis(readingUI.text);
+  });
+  $("#clearReading").addEventListener("click", () => {
+    readingUI.text = ""; readingUI.translation = "";
+    readingUI.note = "";
+    $("#readingText").value = "";
+    $("#readingResult").innerHTML = `<div class="notice">英文を入力すると解析結果が表示されます。</div>`;
+  });
+  $("#genReading").addEventListener("click", () => generateReadingPassage(level));
+  $("#toggleReadingJa")?.addEventListener("click", () => {
+    const box = $(".reading-ja");
+    const hidden = box.classList.toggle("hidden");
+    $("#toggleReadingJa").textContent = hidden ? "和訳を表示" : "和訳を非表示";
+  });
+
+  renderReadingAnalysis(readingUI.text);
+};
+
+async function generateReadingPassage(level) {
+  const btn = $("#genReading");
+  const note = $("#readingAiNote");
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "生成中…";
+  note.textContent = "AIが読解練習用の長文を作成しています。";
+  try {
+    const r = await requestReadingPassage(level);
+    readingUI.text = r.passage || "";
+    readingUI.translation = r.passage_ja || "";
+    $("#readingText").value = readingUI.text;
+    readingUI.note = r.note || (r.online ? "AI生成文を解析しました。" : "");
+    toast(r.online ? "長文を生成しました" : "サンプル英文を表示しました");
+    routes.reading();
+  } catch {
+    note.textContent = "長文生成に失敗しました。AI接続を確認してください。";
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+
+async function requestReadingPassage(level) {
+  try {
+    return await post("/reading/passage", {
+      topic: readingUI.topic,
+      level,
+      length: readingUI.length,
+    });
+  } catch {
+    // Older running servers may not have the dedicated endpoint yet. Reuse the
+    // existing vocabulary-story generator so the screen still works until restart.
+    const story = await post("/words/story", {
+      words: readingTopicTerms(),
+      theme: readingUI.topic || "reading practice",
+      level,
+      format: "story",
+      length: readingUI.length === "medium" ? "medium" : "long",
+    });
+    return {
+      online: story.online,
+      title: story.title || "",
+      passage: story.story || READING_DEFAULT_TEXT,
+      passage_ja: story.story_ja || "",
+      note: story.note || "既存の文章生成APIで長文を作成しました。アプリ再起動後は読解専用APIを使います。",
+    };
+  }
+}
+
+function readingTopicTerms() {
+  const terms = (readingUI.topic.match(/[A-Za-z]+(?:\s+[A-Za-z]+)?/g) || [])
+    .map(t => t.trim().toLowerCase())
+    .filter(t => t.length >= 4)
+    .slice(0, 3);
+  return terms.length ? terms : ["reading", "learning"];
+}
+
+const READING_PRONOUNS = new Set("i me my mine you your yours he him his she her hers it its we us our ours they them their theirs this that these those who whom which whose".split(" "));
+const READING_FUNCTION_WORDS = new Set("a an the in on at by for from with without into onto over under between among through during before after of to as than and but or nor so yet if because although while since when where that which who whom whose".split(" "));
+const READING_PREPOSITIONS = new Set("in on at by for from with without into onto over under between among through during before after of to as than about around across against beyond near inside outside".split(" "));
+const READING_AUX = new Set("am is are was were be been being do does did have has had can could will would shall should may might must".split(" "));
+const READING_LINKING = new Set("am is are was were be been being become becomes became seem seems seemed feel feels felt look looks looked sound sounds sounded remain remains remained appear appears appeared".split(" "));
+const READING_DITRANSITIVE = new Set("give gives gave send sends sent tell tells told show shows showed teach teaches taught offer offers offered ask asks asked bring brings brought buy buys bought lend lends lent".split(" "));
+const READING_OBJECT_COMPLEMENT = new Set("make makes made find finds found keep keeps kept call calls called name names named consider considers considered leave leaves left elect elects elected paint paints painted".split(" "));
+const READING_COMMON_VERBS = new Set("think thinks thought feel feels felt see sees saw seen look looks looked use uses used make makes made help helps helped shape shapes shaped put puts study studies studied give gives gave focus focuses focused become becomes became lead leads led need needs needed show shows showed call calls called test tests tested find finds found keep keeps kept notice notices noticed choose chooses chose repeat repeats repeated connect connects connected follow follows followed introduce introduces introduced add adds added explain explains explained include includes included matter matters mattered point points pointed turn turns turned read reads reading know knows knew understand understands understood".split(" "));
+const READING_SIGNAL_GROUPS = [
+  { key: "contrast", label: "対比", phrases: ["however", "although", "but", "yet", "while", "whereas", "on the other hand"] },
+  { key: "reason", label: "理由", phrases: ["because", "since", "due to", "for this reason"] },
+  { key: "cause", label: "原因", phrases: ["cause", "causes", "lead to", "leads to", "result in", "results in"] },
+  { key: "result", label: "結果", phrases: ["therefore", "so", "as a result", "consequently", "thus"] },
+  { key: "conclusion", label: "結論", phrases: ["in conclusion", "overall", "in short", "to sum up", "finally"] },
+  { key: "example", label: "例示", phrases: ["for example", "for instance", "such as"] },
+  { key: "addition", label: "追加", phrases: ["also", "moreover", "in addition", "furthermore"] },
+  { key: "sequence", label: "順序", phrases: ["first", "second", "next", "then", "before", "after"] },
+  { key: "reference", label: "指示語", phrases: ["this", "that", "these", "those", "it", "they", "them", "their"] },
+];
+
+function renderReadingAnalysis(text) {
+  const result = $("#readingResult");
+  if (!text.trim()) {
+    result.innerHTML = `<div class="notice">英文を入力すると解析結果が表示されます。</div>`;
+    return;
+  }
+  const a = analyzeReading(text);
+  const signalHtml = a.signals.length
+    ? a.signals.slice(0, 20).map(s => `<span class="signal-chip ${s.key}">${esc(s.label)}: ${esc(s.match)}</span>`).join("")
+    : `<span class="muted">接続語・指示語は少なめです。</span>`;
+  const paragraphRoles = a.paragraphs.map(p =>
+    `<div class="role-row"><b>P${p.index + 1}</b><span>${esc(p.role)}</span><small>${esc(p.reason)}</small></div>`).join("");
+  const passageHtml = a.paragraphs.map(p => `
+    <div class="reading-paragraph">
+      <div class="paragraph-head"><b>Paragraph ${p.index + 1}</b><span>${esc(p.role)}</span></div>
+      ${p.sentences.map(s => renderReadingSentence(s)).join("")}
+    </div>`).join("");
+
+  result.innerHTML = `
+    <div class="reading-metrics">
+      <div><b>${a.paragraphs.length}</b><span>段落</span></div>
+      <div><b>${a.sentences.length}</b><span>文</span></div>
+      <div><b>${a.signals.length}</b><span>重要シグナル</span></div>
+      <div><b>${a.sentences.filter(s => s.words.length >= 20).length}</b><span>長めの文</span></div>
+    </div>
+    <div class="reading-legend">
+      <span><i class="subj"></i>主語</span><span><i class="verb"></i>動詞</span>
+      <span><i class="pron"></i>代名詞/指示語</span><span><i class="func"></i>前置詞・接続詞など</span>
+      <span><i class="sig"></i>理由・結果・結論</span>
+    </div>
+    <div class="reading-summary">
+      <section><h2>段落ごとの役割</h2>${paragraphRoles}</section>
+      <section><h2>理解のポイント</h2><div class="signal-list">${signalHtml}</div></section>
+    </div>
+    <h2>色分け本文</h2>
+    <div class="reading-passage">${passageHtml}</div>`;
+
+  result.onclick = e => {
+    const say = e.target.closest("[data-readsay]");
+    if (say) { speak(say.dataset.readsay); return; }
+    const word = e.target.closest(".reading-token.word");
+    if (word) showGloss(word, cleanWord(word.textContent), "word", null);
+  };
+}
+
+function renderReadingSentence(s) {
+  const chunks = s.chunks.map(c =>
+    `<span class="chunk ${c.kind}"><b>${esc(c.label)}</b>${esc(c.text)}</span>`).join("");
+  const focus = s.focus ? `<span class="focus">${esc(s.focus)}</span>` : "";
+  return `
+    <div class="reading-sentence">
+      <div class="sentence-meta">
+        <span class="pattern">${esc(s.pattern)}</span>
+        ${focus}
+        <button class="mini" data-readsay="${esc(s.text)}">🔊</button>
+      </div>
+      <div class="reading-line">${renderReadingTokens(s)}</div>
+      <div class="chunk-row">${chunks}</div>
+    </div>`;
+}
+
+function renderReadingTokens(s) {
+  let wi = 0;
+  return s.text.split(/([A-Za-z]+(?:'[A-Za-z]+)?|\d+)/g).map(part => {
+    if (!part) return "";
+    if (!/^[A-Za-z0-9']+$/.test(part)) return esc(part);
+    const cls = ["reading-token", "word"].concat([...(s.wordClasses[wi] || [])]).join(" ");
+    wi += 1;
+    return `<span class="${cls}">${esc(part)}</span>`;
+  }).join("");
+}
+
+function analyzeReading(text) {
+  const paragraphTexts = text.trim().split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const paragraphs = [];
+  const sentences = [];
+  paragraphTexts.forEach((pText, pi) => {
+    const items = splitReadingSentences(pText).map((sText, si) =>
+      analyzeReadingSentence(sText, pi, sentences.length + si));
+    const role = paragraphRole(pText, pi, paragraphTexts.length);
+    paragraphs.push({ index: pi, text: pText, sentences: items, ...role });
+    sentences.push(...items);
+  });
+  const signals = sentences.flatMap(s => s.signals);
+  return { paragraphs, sentences, signals };
+}
+
+function splitReadingSentences(text) {
+  const matches = text.match(/[^.!?]+(?:[.!?]+|$)(?:["')\]]+)?/g) || [text];
+  return matches.map(s => s.trim()).filter(Boolean);
+}
+
+function analyzeReadingSentence(text, paragraphIndex, sentenceIndex) {
+  const words = text.match(/[A-Za-z]+(?:'[A-Za-z]+)?|\d+/g) || [];
+  const lower = words.map(w => w.toLowerCase());
+  const verb = findReadingVerb(lower);
+  const signals = findReadingSignals(text);
+  const pattern = classifySentencePattern(lower, verb);
+  const classes = words.map(() => new Set());
+  const subjectStart = Math.max(0, firstContentIndex(lower, verb.start));
+  if (verb.start >= 0) {
+    for (let i = subjectStart; i < verb.start; i++) classes[i].add("rs-subject");
+    for (let i = verb.start; i <= verb.end; i++) classes[i]?.add("rs-verb");
+  }
+  lower.forEach((w, i) => {
+    if (READING_PRONOUNS.has(w)) classes[i].add("rs-pronoun");
+    if (READING_FUNCTION_WORDS.has(w)) classes[i].add("rs-function");
+    if (signals.some(s => s.words.includes(w))) classes[i].add("rs-signal");
+  });
+  return {
+    text, words, lower, paragraphIndex, sentenceIndex,
+    pattern: pattern.label,
+    focus: sentenceFocus(signals, sentenceIndex),
+    chunks: readingChunks(words, lower, verb, pattern),
+    signals,
+    wordClasses: classes,
+  };
+}
+
+function findReadingVerb(lower) {
+  for (let i = 0; i < lower.length; i++) {
+    const w = lower[i];
+    if (READING_AUX.has(w)) {
+      const end = lower[i + 1] && !READING_FUNCTION_WORDS.has(lower[i + 1]) ? i + 1 : i;
+      return { start: i, end, word: lower[end] || w };
+    }
+    if (READING_COMMON_VERBS.has(w) || /(?:ed|ing|ize|ise)$/.test(w)) {
+      return { start: i, end: i, word: w };
+    }
+  }
+  return { start: -1, end: -1, word: "" };
+}
+
+function firstContentIndex(lower, verbStart) {
+  if (verbStart <= 0) return 0;
+  const starters = new Set(["however", "therefore", "also", "moreover", "first", "second", "next", "then", "finally"]);
+  return starters.has(lower[0]) && verbStart > 1 ? 1 : 0;
+}
+
+function classifySentencePattern(lower, verb) {
+  if (verb.start < 0) return { label: "文型不明", kind: "unknown" };
+  const main = verb.word;
+  const after = lower.slice(verb.end + 1).filter(w =>
+    !READING_FUNCTION_WORDS.has(w) && !/^\d+$/.test(w));
+  if (READING_LINKING.has(main)) {
+    return { label: after.length ? "SVC（主語＋動詞＋補語）" : "SV（主語＋動詞）", kind: after.length ? "svc" : "sv" };
+  }
+  if (READING_DITRANSITIVE.has(main) && after.length >= 2) return { label: "SVOO（主語＋動詞＋目的語＋目的語）", kind: "svoo" };
+  if (READING_OBJECT_COMPLEMENT.has(main) && after.length >= 2) return { label: "SVOC（主語＋動詞＋目的語＋補語）", kind: "svoc" };
+  if (after.length) return { label: "SVO（主語＋動詞＋目的語）", kind: "svo" };
+  return { label: "SV（主語＋動詞）", kind: "sv" };
+}
+
+function readingChunks(words, lower, verb, pattern) {
+  if (!words.length) return [];
+  if (verb.start < 0) return [{ label: "文", text: words.join(" "), kind: "all" }];
+  const chunks = [];
+  const sText = words.slice(0, verb.start).join(" ").trim();
+  const vText = words.slice(verb.start, verb.end + 1).join(" ").trim();
+  const rest = words.slice(verb.end + 1);
+  if (sText) chunks.push({ label: "S 主語", text: sText, kind: "subject" });
+  if (vText) chunks.push({ label: "V 動詞", text: vText, kind: "verb" });
+  if (rest.length) {
+    const prepAt = rest.findIndex((_, i) => READING_PREPOSITIONS.has(lower[verb.end + 1 + i]));
+    const mainRest = prepAt >= 0 ? rest.slice(0, prepAt) : rest;
+    const prepRest = prepAt >= 0 ? rest.slice(prepAt) : [];
+    if (mainRest.length) {
+      const label = pattern.kind === "svc" ? "C 補語" : pattern.kind === "sv" ? "修飾" : "O 目的語";
+      chunks.push({ label, text: mainRest.join(" "), kind: "object" });
+    }
+    if (prepRest.length) chunks.push({ label: "修飾句", text: prepRest.join(" "), kind: "modifier" });
+  }
+  return chunks;
+}
+
+function findReadingSignals(text) {
+  const low = text.toLowerCase();
+  const hits = [];
+  READING_SIGNAL_GROUPS.forEach(g => {
+    g.phrases.forEach(p => {
+      const re = new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}\\b`, "i");
+      if (re.test(low)) {
+        hits.push({ key: g.key, label: g.label, match: p, words: p.split(/\s+/) });
+      }
+    });
+  });
+  const seen = new Set();
+  return hits.filter(h => {
+    const k = `${h.key}:${h.match}`;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+
+function sentenceFocus(signals, sentenceIndex) {
+  const keys = new Set(signals.map(s => s.key));
+  if (keys.has("conclusion")) return "結論";
+  if (keys.has("result")) return "結果";
+  if (keys.has("reason") || keys.has("cause")) return "理由・原因";
+  if (keys.has("contrast")) return "対比";
+  if (keys.has("example")) return "具体例";
+  if (sentenceIndex === 0) return "要点";
+  if (keys.has("reference")) return "指示語に注意";
+  return "詳細";
+}
+
+function paragraphRole(text, index, total) {
+  const signals = findReadingSignals(text);
+  const keys = new Set(signals.map(s => s.key));
+  if (index === 0) return { role: "導入・話題提示", reason: "最初の段落なので、テーマや問題意識をつかみます。" };
+  if (index === total - 1 && (keys.has("conclusion") || keys.has("result"))) {
+    return { role: "結論・まとめ", reason: "結論/結果のシグナルがあり、筆者の主張を回収しています。" };
+  }
+  if (keys.has("example")) return { role: "具体例", reason: "for example などで抽象的な内容を具体化しています。" };
+  if (keys.has("reason") || keys.has("cause")) return { role: "理由・原因の説明", reason: "because などで主張の根拠を示しています。" };
+  if (keys.has("contrast")) return { role: "対比・転換", reason: "however などで前の内容との違いを示しています。" };
+  if (keys.has("result")) return { role: "結果・影響", reason: "therefore などで結果や帰結を示しています。" };
+  return { role: "展開・補足", reason: "前後の段落を支える説明部分です。" };
+}
+
 // ---------- PROFILE / SETTINGS ----------
 routes.profile = async () => {
-  const p = state.profile = await api("/profile");
+  const [profile, health] = await Promise.all([
+    api("/profile"),
+    api("/health").catch(() => null),
+  ]);
+  const p = state.profile = profile;
+  if (health?.ai) state.ai = health.ai;
   state.ai.speech = await api("/speech/status").catch(() => state.ai.speech || {});
   setAiBadge();
   const styles = state.artStyles = state.artStyles || await api("/art-styles");
@@ -1036,19 +1468,19 @@ routes.profile = async () => {
       <div class="ai-row">
         <div>
           <div class="ai-kind">会話・翻訳・採点</div>
-          <div class="muted">会話: ${esc(state.ai.model || "モデル未確認")}<br>和訳・添削: ${esc(state.ai.translate_model || state.ai.model || "モデル未確認")}</div>
+          <div class="muted" id="aiChatModels">会話: ${esc(state.ai.model || "モデル未確認")}<br>和訳・添削: ${esc(state.ai.translate_model || state.ai.model || "モデル未確認")}</div>
         </div>
-        <b class="${chatOk ? "ok-text" : "warn-text"}">${chatOk ? "接続中 ✓" : "未接続"}</b>
+        <b id="aiChatConn" class="${chatOk ? "ok-text" : "warn-text"}">${chatOk ? "接続中 ✓" : "未接続"}</b>
       </div>
-      <div class="ai-note">${esc(state.ai.note || "")}</div>
+      <div class="ai-note" id="aiChatNote">${esc(state.ai.note || "")}</div>
       <div class="ai-row">
         <div>
           <div class="ai-kind">音声認識（Whisper）</div>
-          <div class="muted">${esc(speech.model || "モデル未確認")} / ${esc(speechCache)}</div>
+          <div class="muted" id="aiSpeechModel">${esc(speech.model || "モデル未確認")} / ${esc(speechCache)}</div>
         </div>
-        <b class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "接続中 ✓" : "未接続"}</b>
+        <b id="aiSpeechConn" class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "接続中 ✓" : "未接続"}</b>
       </div>
-      <div class="ai-note">${esc(speech.note || "")}</div>
+      <div class="ai-note" id="aiSpeechNote">${esc(speech.note || "")}</div>
       <p class="sub" style="margin:.8rem 0 0">録音して発話は音声認識（Whisper）で文字起こししたあと、会話・翻訳モデルで採点します。どちらの状態もここで確認できます。</p>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.7rem">
         <button class="btn sm ghost" id="reconnect">再接続を試す</button>
@@ -1107,6 +1539,41 @@ const MODEL_KINDS = [
   { kind: "transcribe", label: "音声認識モデル（Whisper）", hint: "録音した発話の文字起こし", filter: m => m.kind === "speech" },
 ];
 
+const MODEL_KIND_LABELS = { chat: "会話", translate: "和訳", transcribe: "音声" };
+
+function refreshAiConnectionPanel() {
+  const speech = state.ai.speech || {};
+  const chatOk = !!state.ai.online;
+  const speechOk = !!speech.online;
+  const speechCache = speechOk ? (speech.cached ? "ダウンロード済み" : "未ダウンロード/初回準備") : "利用不可";
+  const chatModels = $("#aiChatModels");
+  if (!chatModels) return;
+  chatModels.innerHTML = `会話: ${esc(state.ai.model || "モデル未確認")}<br>和訳・添削: ${esc(state.ai.translate_model || state.ai.model || "モデル未確認")}`;
+  const chatConn = $("#aiChatConn");
+  chatConn.className = chatOk ? "ok-text" : "warn-text";
+  chatConn.textContent = chatOk ? "接続中 ✓" : "未接続";
+  $("#aiChatNote").textContent = state.ai.note || "";
+  $("#aiSpeechModel").textContent = `${speech.model || "モデル未確認"} / ${speechCache}`;
+  const speechConn = $("#aiSpeechConn");
+  speechConn.className = speechOk ? "ok-text" : "warn-text";
+  speechConn.textContent = speechOk ? "接続中 ✓" : "未接続";
+  $("#aiSpeechNote").textContent = speech.note || "";
+}
+
+function modelHasKind(m, field, kind) {
+  return Array.isArray(m[field]) && m[field].includes(kind);
+}
+
+function modelStateLine(kind, cur, configured, active) {
+  if (active) {
+    const suffix = kind.allowDefault && !cur ? "（会話モデルと同じ）" : "";
+    return `現在使用中: ${active.id}${suffix}`;
+  }
+  if (configured) return `選択中: ${configured.id}（未読み込み）`;
+  if (cur) return `選択設定: ${cur}（未ダウンロード）`;
+  return "会話モデルと同じ";
+}
+
 async function loadModelPanel() {
   const panel = $("#modelPanel");
   if (!panel) return;
@@ -1117,6 +1584,11 @@ async function loadModelPanel() {
     panel.innerHTML = `<div class="notice">${esc(data.note || "Foundry Local SDK が利用できないため、モデルを管理できません。")}</div>`;
     return;
   }
+  if (data.status) {
+    state.ai = data.status;
+    setAiBadge();
+    refreshAiConnectionPanel();
+  }
   const models = data.models || [];
   const sel = data.selected || {};
 
@@ -1124,13 +1596,22 @@ async function loadModelPanel() {
     // Only cached (downloaded) models can be selected for use.
     const opts = models.filter(k.filter).filter(m => m.cached);
     const cur = sel[k.kind] || "";
+    const active = opts.find(m => modelHasKind(m, "active_kinds", k.kind));
+    const configured = opts.find(m => modelHasKind(m, "selected_kinds", k.kind));
+    const selectedModel = active || configured;
+    const selectedValue = k.allowDefault && !cur ? "" : (selectedModel ? selectedModel.id : "");
+    const hasSelectedValue = selectedValue && opts.some(m => m.id === selectedValue);
+    const missingOpt = cur && !hasSelectedValue && !(k.allowDefault && !cur)
+      ? `<option value="${esc(cur)}" selected disabled>${esc(cur)}（未ダウンロード）</option>`
+      : "";
     const empty = opts.length === 0
       ? `<div class="muted" style="font-size:.82rem">ダウンロード済みのモデルがありません。下のカタログから取得してください。</div>`
       : "";
-    const optionTags = (k.allowDefault ? [`<option value="">（会話モデルと同じ）</option>`] : [])
+    const optionTags = (k.allowDefault ? [`<option value="" ${!cur ? "selected" : ""}>（会話モデルと同じ）</option>`] : [])
+      .concat(missingOpt ? [missingOpt] : [])
       .concat(opts.map(m => {
-        const isSel = m.id === cur || m.alias === cur;
-        return `<option value="${esc(m.id)}" ${isSel ? "selected" : ""}>${esc(m.id)}${m.loaded ? " ・使用中" : ""}</option>`;
+        const isSel = !!selectedValue && m.id === selectedValue;
+        return `<option value="${esc(m.id)}" ${isSel ? "selected" : ""}>${esc(m.id)}</option>`;
       })).join("");
     return `
       <div class="model-row">
@@ -1139,18 +1620,26 @@ async function loadModelPanel() {
         </div>
         <div class="model-row-ctl">
           ${opts.length ? `<select class="model-select" data-kind="${k.kind}">${optionTags}</select>` : empty}
+          <div class="model-state">${esc(modelStateLine(k, cur, configured, active))}</div>
         </div>
       </div>`;
   }).join("");
 
   // List of all models with download buttons for not-yet-cached ones.
   const catalog = models.map(m => {
+    const activeKinds = (m.active_kinds || []).map(k => MODEL_KIND_LABELS[k] || k);
     const badge = m.cached
       ? `<span class="model-badge ok">ダウンロード済み</span>`
       : `<span class="model-badge">未取得</span>`;
+    const activeBadge = activeKinds.length
+      ? `<span class="model-badge active">使用中: ${esc(activeKinds.join("・"))}</span>`
+      : "";
+    const loadedBadge = m.cached && m.loaded && !activeKinds.length
+      ? `<span class="model-badge loaded">読み込み済み</span>`
+      : "";
     const kindJa = m.kind === "speech" ? "音声" : m.kind === "chat" ? "会話" : "その他";
     const act = m.cached
-      ? (m.loaded ? `<span class="muted">使用中</span>` : "")
+      ? `${activeBadge}${loadedBadge}`
       : `<button class="btn sm" data-dl="${esc(m.id)}" data-dlkind="${m.kind === "speech" ? "transcribe" : "chat"}">⬇ ダウンロード</button>`;
     return `
       <div class="catalog-row" data-row="${esc(m.id)}">
@@ -1168,6 +1657,7 @@ async function loadModelPanel() {
     try {
       state.ai = await post("/ai/models/select", { kind: s.dataset.kind, alias: s.value });
       setAiBadge();
+      refreshAiConnectionPanel();
       toast("モデルを切り替えました");
       loadModelPanel();
     } catch { toast("モデルの切り替えに失敗しました"); }
@@ -1218,10 +1708,6 @@ async function startModelDownload(alias, kind, btn) {
         toast(s.message || "ダウンロードに失敗しました");
       } else {
         toast(`${alias} のダウンロードが完了しました`);
-        if (kind === "chat" || kind === "translate") {
-          state.ai = await post("/ai/reconnect", {}).catch(() => state.ai);
-          setAiBadge();
-        }
         loadModelPanel();   // refresh: model now cached & selectable
       }
       return;
