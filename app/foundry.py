@@ -28,14 +28,16 @@ import threading
 import wave
 from typing import Any
 
-from . import config
+from . import config, database
 
 _client = None
 _base_url: str | None = None
 _model: str | None = None
+_translate_model: str | None = None
 _manager = None  # live foundry-local-sdk manager (when managed)
 _status: dict[str, Any] = {"online": False, "base_url": None, "model": None,
-                           "note": "not initialised", "managed": False, "port": None}
+                           "translate_model": None, "note": "not initialised",
+                           "managed": False, "port": None}
 _lock = threading.Lock()
 
 # First-launch setup progress (execution-provider + model download/load).
@@ -48,6 +50,45 @@ _setup_thread: "threading.Thread | None" = None
 
 def _base_status() -> dict[str, Any]:
     return dict(_status)
+
+
+# --- User-selected model preferences (persisted in profile.settings) --------
+# The settings UI lets the learner pick which cached model to use for chat,
+# translation, and speech-to-text. These override the config/env defaults.
+
+def _prefs() -> dict[str, Any]:
+    try:
+        return database.get_profile().get("settings") or {}
+    except Exception:
+        return {}
+
+
+def eff_chat_model() -> str:
+    return (_prefs().get("chat_model") or "").strip() or config.CHAT_MODEL
+
+
+def eff_translate_model() -> str:
+    """Translate model preference; empty falls back to the chat model."""
+    return (_prefs().get("translate_model") or "").strip() or config.TRANSLATE_MODEL
+
+
+def eff_transcribe_model() -> str:
+    return (_prefs().get("transcribe_model") or "").strip() or config.TRANSCRIBE_MODEL
+
+
+def set_model_preference(kind: str, alias: str | None) -> dict[str, Any]:
+    """Persist a model choice ('chat'|'translate'|'transcribe') and reconnect."""
+    key = {"chat": "chat_model", "translate": "translate_model",
+           "transcribe": "transcribe_model"}.get(kind)
+    if not key:
+        raise ValueError(f"unknown model kind: {kind}")
+    settings = _prefs()
+    settings[key] = (alias or "").strip()
+    database.update_profile(settings=settings)
+    # Reconnect so chat/translate immediately use the newly chosen model.
+    if kind in ("chat", "translate"):
+        reconnect()
+    return status()
 
 
 # --- URL / port helpers ----------------------------------------------------
@@ -109,40 +150,72 @@ def _start_managed() -> str | None:
         return None
 
     host = config.FOUNDRY_HOST
-    # Try the chosen port, then a couple of fresh free ports on collision.
-    candidate_ports = []
-    p0 = _choose_port()
-    candidate_ports.append(p0)
-    for _ in range(2):
-        candidate_ports.append(_free_port())
+    import time
 
-    last_err = ""
-    for port in candidate_ports:
-        url = f"http://{host}:{port}"
+    # The SDK's FoundryLocalManager is a process-wide singleton: initialize()
+    # can only be called once and binds the web URL from config at that time.
+    # So we choose ONE port, build the config, and (re)use the singleton.
+    manager = getattr(FoundryLocalManager, "instance", None)
+
+    def _verify_and_finish(base_url: str, port: int) -> str | None:
+        for _ in range(15):
+            if _reachable(base_url):
+                break
+            time.sleep(0.4)
+        if _reachable(base_url):
+            _status["managed"] = True
+            _status["port"] = port
+            return base_url
+        return None
+
+    # If a singleton already exists (e.g. created earlier for speech), reuse it
+    # and just (re)start the web service on its configured URL.
+    if manager is not None:
         try:
-            cfg = Configuration(app_name="viveenglish", web={"urls": url})
-            FoundryLocalManager.initialize(cfg)
-            manager = FoundryLocalManager.instance
-            manager.start_web_service()
-            base = _normalize(url)
-            # Give the service a moment, then verify.
-            import time
-            for _ in range(15):
-                if _reachable(base):
-                    break
-                time.sleep(0.4)
-            if _reachable(base):
-                _manager = manager
-                _status["managed"] = True
-                _status["port"] = port
+            urls = getattr(manager, "urls", None)
+            if not urls:
+                manager.start_web_service()
+                urls = getattr(manager, "urls", None)
+            bound = urls[0] if isinstance(urls, (list, tuple)) and urls else (urls or "")
+            if not bound:
+                # No web URL bound to the existing singleton; fall back to a probe.
+                return None
+            base = _normalize(str(bound))
+            port = int(str(bound).rstrip("/").rsplit(":", 1)[-1]) if ":" in str(bound) else 0
+            _manager = manager
+            done = _verify_and_finish(base, port)
+            if done:
                 _maybe_load_model(manager)
-                return base
-            last_err = f"started but not reachable on {url}"
+                return done
         except Exception as exc:
-            last_err = str(exc)
-            continue
-    if last_err:
-        _status["note"] = f"managed start failed: {last_err}"
+            _status["note"] = f"managed reuse failed: {exc}"
+        return None
+
+    # Fresh start: pick a port and initialize the singleton with a WebService.
+    port = _choose_port()
+    url = f"http://{host}:{port}"
+    try:
+        web = Configuration.WebService(urls=url)
+        cfg = Configuration(app_name="viveenglish", web=web)
+        FoundryLocalManager.initialize(cfg)
+        manager = FoundryLocalManager.instance
+        manager.start_web_service()
+        # The service reports the actually-bound URL(s); prefer them.
+        bound = getattr(manager, "urls", None)
+        actual = (bound[0] if isinstance(bound, (list, tuple)) and bound else (bound or url))
+        base = _normalize(str(actual))
+        try:
+            port = int(str(actual).rstrip("/").rsplit(":", 1)[-1])
+        except Exception:
+            pass
+        _manager = manager
+        done = _verify_and_finish(base, port)
+        if done:
+            _maybe_load_model(manager)
+            return done
+        _status["note"] = f"started but not reachable on {base}"
+    except Exception as exc:
+        _status["note"] = f"managed start failed: {exc}"
     return None
 
 
@@ -178,13 +251,23 @@ def _catalog_task(manager, model_id: str) -> str | None:
     return None
 
 
+def _strip_variant(s: str) -> str:
+    """Normalize a model id for matching: lowercase, drop the ':<n>' variant suffix."""
+    return (s or "").split(":", 1)[0].strip().lower()
+
+
 def _pick_chat_model(ids: list[str], manager=None) -> str | None:
     """Choose a text/chat-completion model, never a vision/embedding/audio one."""
     if not ids:
         return None
-    alias = config.CHAT_MODEL.lower()
-    # 1) configured alias, as long as it isn't an obviously non-chat variant
-    preferred = [m for m in ids if alias in m.lower() and not _NON_CHAT.search(m)]
+    alias = eff_chat_model().lower()
+    alias_base = _strip_variant(alias)
+    # 1) configured model — match ignoring the ':<n>' variant suffix on either
+    # side, since /v1/models reports ids without it but prefs may carry it.
+    preferred = [m for m in ids
+                 if not _NON_CHAT.search(m)
+                 and (alias in m.lower() or _strip_variant(m) == alias_base
+                      or m.lower() == alias)]
     if preferred:
         return preferred[0]
     # 2) drop clearly non-chat models
@@ -206,14 +289,30 @@ def _pick_chat_model(ids: list[str], manager=None) -> str | None:
     return pool[0]
 
 
+def _resolve_configured_model(ids: list[str], configured: str) -> str | None:
+    """Resolve a configured alias/prefix to a currently loaded model id."""
+    key = (configured or "").strip().lower()
+    if not key:
+        return None
+    for mid in ids:
+        if mid.lower() == key:
+            return mid
+    for mid in ids:
+        m = mid.lower()
+        if m.startswith(key) or key in m:
+            return mid
+    return configured
+
+
 def _maybe_load_model(manager) -> None:
     """Load a cached CHAT model if available (no surprise multi-GB downloads)."""
     if not config.AUTOLOAD_MODEL:
         return
     try:  # pragma: no cover
-        model = manager.catalog.get_model(config.CHAT_MODEL)
-        mid = getattr(model, "id", "") or config.CHAT_MODEL
-        if getattr(model, "is_cached", False) and not _NON_CHAT.search(mid):
+        chat_alias = eff_chat_model()
+        model = _find_catalog_model(manager, chat_alias)
+        mid = getattr(model, "id", "") or chat_alias
+        if model is not None and getattr(model, "is_cached", False) and not _NON_CHAT.search(mid):
             model.load()
             return
     except Exception:
@@ -227,10 +326,39 @@ def _maybe_load_model(manager) -> None:
             if not mid or _NON_CHAT.search(mid):
                 continue
             if "chat" in task or "text-generation" in task or "instruct" in mid.lower():
-                manager.catalog.get_model(mid).load()
+                m.load()
                 return
     except Exception:
         pass  # not fatal; chat will report if no model is ready
+
+
+def _prepare_catalog_model(manager, alias: str, *, phase: str, label: str) -> str | None:
+    """Download/load a configured catalog model and return its resolved id."""
+    if not alias:
+        return None
+    model = _find_catalog_model(manager, alias)
+    if model is None:
+        raise ValueError(f"model '{alias}' not found in catalog")
+    mid = getattr(model, "id", "") or alias
+    if _NON_CHAT.search(mid):
+        raise ValueError(f"{alias} is not a text/chat model ({mid})")
+    if getattr(model, "is_cached", False):
+        _set_setup(state="loading", phase=phase, progress=100, model=mid,
+                   message=f"{label}を読み込んでいます…")
+    else:
+        _set_setup(state="downloading", phase=phase, progress=0, model=mid,
+                   message=f"{label}（{alias}）をダウンロード中…")
+
+        def cb(percent):
+            try:
+                _set_setup(progress=float(percent))
+            except Exception:
+                pass
+        model.download(cb)
+        _set_setup(state="loading", phase=phase, progress=100, model=mid,
+                   message=f"{label}を読み込んでいます…")
+    model.load()
+    return mid
 
 
 # --- Fallback discovery (SDK not installed / managed disabled) -------------
@@ -250,6 +378,14 @@ def _from_cli() -> str | None:
     return None
 
 
+def _own_port() -> int:
+    """Port this ViveEnglish web server listens on (so we never probe ourselves)."""
+    try:
+        return int(os.getenv("PORT", "8000"))
+    except Exception:
+        return 8000
+
+
 def _discover_unmanaged() -> str | None:
     candidates: list[str] = []
     if config.FOUNDRY_BASE_URL:
@@ -259,8 +395,12 @@ def _discover_unmanaged() -> str | None:
         candidates.append(u)
     if config.FOUNDRY_FALLBACK_URL:
         candidates.append(_normalize(config.FOUNDRY_FALLBACK_URL))
-    for port in (5273, 5272, 8000, 1234):
-        candidates.append(f"http://127.0.0.1:{port}/v1")
+    # Common Foundry Local ports. Exclude our own web-server port so we never
+    # probe ViveEnglish itself (which would hit /v1/models and log a 404).
+    own = _own_port()
+    for port in (5273, 5272, 1234):
+        if port != own:
+            candidates.append(f"http://127.0.0.1:{port}/v1")
     seen, first = set(), None
     for c in candidates:
         if c in seen:
@@ -283,19 +423,58 @@ def _resolve_base_url() -> str | None:
         managed = _start_managed()
         if managed:
             return managed
-    return _discover_unmanaged()
+    unmanaged = _discover_unmanaged()
+    if unmanaged and _reachable(unmanaged):
+        return unmanaged
+    # Do not return a stale fallback URL such as localhost:5273 unless it
+    # actually answers; init() would otherwise report that dead URL forever.
+    return None
+
+
+def _force_managed_base_url() -> str | None:
+    """Start/restart the SDK-managed web service and return its /v1 base URL."""
+    global _manager, _base_url
+    _manager = None
+    managed = _start_managed()
+    if managed:
+        _base_url = managed
+        return managed
+    return None
 
 
 # --- Init / status ---------------------------------------------------------
 
+def _ensure_loaded(model_id: str) -> bool:
+    """Make sure a model is loaded into memory before chat calls hit it.
+
+    Foundry Local lists cached models at /v1/models even when they are not yet
+    loaded, and a chat completion against an unloaded model fails with 400
+    'Model ... is not loaded'. Load it via the SDK catalog if needed.
+    """
+    if not model_id or _manager is None:
+        return False
+    try:  # pragma: no cover - depends on local install
+        m = _find_catalog_model(_manager, model_id)
+        if m is None:
+            return False
+        if getattr(m, "is_loaded", False):
+            return True
+        m.load()
+        return True
+    except Exception as exc:
+        _status["note"] = f"model load failed: {exc}"
+        return False
+
+
 def init() -> dict[str, Any]:
     """Probe / start Foundry Local. Safe to call repeatedly."""
-    global _client, _base_url, _model, _status
+    global _client, _base_url, _model, _translate_model, _status
     with _lock:
         try:
             from openai import OpenAI
         except Exception as exc:
             _status = {"online": False, "base_url": None, "model": None,
+                       "translate_model": None,
                        "note": f"openai client unavailable: {exc}",
                        "managed": False, "port": None}
             return _status
@@ -306,7 +485,9 @@ def init() -> dict[str, Any]:
                            note="Foundry Local endpoint not available")
             return _status
 
-        model = config.CHAT_MODEL
+        chat_pref = eff_chat_model()
+        translate_pref = eff_translate_model()
+        model = chat_pref
         try:
             client = OpenAI(base_url=base, api_key=config.FOUNDRY_API_KEY,
                             timeout=config.AI_TIMEOUT, max_retries=0)
@@ -315,17 +496,57 @@ def init() -> dict[str, Any]:
             picked = _pick_chat_model(ids, _manager)
             if picked:
                 model = picked
-            _client, _base_url, _model = client, base, model
+            # Ensure the chosen chat model is actually loaded (cached-but-not-
+            # loaded models are listed by /v1/models but reject completions).
+            _ensure_loaded(model)
+            translate_model = _resolve_configured_model(ids, translate_pref) if translate_pref else model
+            if translate_model and translate_model != model:
+                _ensure_loaded(translate_model)
+            _client, _base_url, _model, _translate_model = client, base, model, translate_model
             note = "ready"
             if ids and _NON_CHAT.search(model or ""):
                 note = ("warning: selected model may not support chat. "
-                        "Set VIVE_CHAT_MODEL to a text/chat-completion model.")
-            _status.update(online=True, base_url=base, model=model, note=note)
+                        "設定画面でテキスト/チャット対応モデルを選んでください。")
+            _status.update(online=True, base_url=base, model=model,
+                           translate_model=translate_model,
+                           note=note)
         except Exception as exc:
-            _client, _base_url, _model = None, base, model
+            _client, _base_url, _model, _translate_model = None, base, model, (translate_pref or model)
             _status.update(online=False, base_url=base, model=model,
+                           translate_model=(translate_pref or model),
                            note=f"endpoint not reachable: {exc}")
         return _status
+
+
+_init_thread: "threading.Thread | None" = None
+
+
+def init_async() -> None:
+    """Start init() in a background thread so app startup never blocks.
+
+    Starting/probing Foundry Local can take several seconds (service spin-up,
+    SDK init, model load). Doing that inside FastAPI's startup event would stop
+    uvicorn from accepting requests until it finishes — the web UI would appear
+    to hang. Running it in a daemon thread lets the server answer immediately;
+    the UI polls /api/health and /api/ai/* for readiness.
+    """
+    global _init_thread
+    if _init_thread is not None and _init_thread.is_alive():
+        return
+    _status["note"] = "AIサービスを初期化しています…"
+    _init_thread = threading.Thread(target=init, daemon=True)
+    _init_thread.start()
+
+
+def reconnect(force_managed: bool = False) -> dict[str, Any]:
+    """Reconnect AI, optionally discarding stale discovered URLs."""
+    global _client, _base_url, _model
+    if force_managed or (_status.get("base_url") and not _reachable(str(_status["base_url"]))):
+        _client = None
+        _model = None
+        if config.MANAGE_FOUNDRY and not config.FOUNDRY_BASE_URL:
+            _force_managed_base_url()
+    return init()
 
 
 def status() -> dict[str, Any]:
@@ -379,10 +600,11 @@ def _sdk_manager(initialize: bool = True):
 
 
 def _resolve_asr_model(manager):
-    aliases = [config.TRANSCRIBE_MODEL] + [a for a in ASR_CANDIDATES if a != config.TRANSCRIBE_MODEL]
+    want = eff_transcribe_model()
+    aliases = [want] + [a for a in ASR_CANDIDATES if a != want]
     for alias in aliases:
         try:
-            m = manager.catalog.get_model(alias)
+            m = _find_catalog_model(manager, alias)
             if m:
                 return m
         except Exception:
@@ -397,10 +619,11 @@ def _model_label(model, fallback: str) -> str:
 def speech_status(init_manager: bool = False) -> dict[str, Any]:
     """Return SDK/Whisper readiness without downloading or loading a model."""
     mgr, err = _sdk_manager(initialize=init_manager)
+    want = eff_transcribe_model()
     base = {
         "online": False,
         "sdk": not (err and err.startswith("sdk unavailable")),
-        "model": config.TRANSCRIBE_MODEL,
+        "model": want,
         "cached": False,
         "note": "",
     }
@@ -416,14 +639,14 @@ def speech_status(init_manager: bool = False) -> dict[str, Any]:
 
     model = _resolve_asr_model(mgr)
     if model is None:
-        base["note"] = (f"音声認識モデル {config.TRANSCRIBE_MODEL} が見つかりません。"
+        base["note"] = (f"音声認識モデル {want} が見つかりません。"
                         "設定またはモデル取得状況を確認してください。")
         return base
 
     cached = bool(getattr(model, "is_cached", False))
     base.update(
         online=True,
-        model=_model_label(model, config.TRANSCRIBE_MODEL),
+        model=_model_label(model, want),
         cached=cached,
         note=("Whisper音声認識を利用できます。"
               if cached else "Whisperモデルは見つかりました。初回録音時にダウンロード/準備します。"),
@@ -469,7 +692,7 @@ def transcribe(wav_bytes: bytes) -> dict[str, Any]:
     model = _resolve_asr_model(mgr)
     if model is None:
         return {"online": False, "text": "",
-                "note": (f"音声認識モデルが見つかりません。`foundry model run {config.TRANSCRIBE_MODEL}` "
+                "note": (f"音声認識モデルが見つかりません。`foundry model run {eff_transcribe_model()}` "
                          "で取得するか、環境変数 VIVE_TRANSCRIBE_MODEL を設定してください。"),
                 "speech": speech_status()}
     try:
@@ -568,9 +791,10 @@ def ensure_model_async() -> dict[str, Any]:
             return dict(_setup)
         if _setup_thread is not None and _setup_thread.is_alive():
             return dict(_setup)
+        _setup.update(state="checking", progress=0, phase="",
+                      message="準備を確認しています…", detail="")
         _setup_thread = threading.Thread(target=_run_setup, daemon=True)
         _setup_thread.start()
-        _setup.update(state="checking", message="準備を確認しています…")
         return dict(_setup)
 
 
@@ -579,6 +803,12 @@ def _run_setup() -> None:
     try:
         from foundry_local_sdk import Configuration, FoundryLocalManager  # type: ignore  # noqa
     except Exception:
+        current = init()
+        if current.get("online"):
+            _set_setup(state="ready", progress=100, phase="attached",
+                       model=current.get("model"),
+                       message="既存のローカルAIサービスに接続済みです。")
+            return
         _set_setup(state="offline", progress=0,
                    message="AI SDK が見つかりません。オフラインのまま学習を続けられます。")
         return
@@ -589,6 +819,12 @@ def _run_setup() -> None:
     init()
     mgr = _manager
     if mgr is None:
+        current = status()
+        if current.get("online"):
+            _set_setup(state="ready", progress=100, phase="attached",
+                       model=current.get("model"),
+                       message="既存のローカルAIサービスに接続済みです。")
+            return
         _set_setup(state="offline", message="ローカルAIサービスを起動できませんでした。"
                                             "オフラインのまま学習を続けられます。")
         return
@@ -613,35 +849,25 @@ def _run_setup() -> None:
         pass  # EP prep is best-effort; model can still run on CPU fallback
 
     # 2) Chat model download + load.
+    chat_alias = eff_chat_model()
+    translate_alias = eff_translate_model()
     try:
-        alias = config.CHAT_MODEL
-        model = mgr.catalog.get_model(alias)
-        mid = getattr(model, "id", "") or alias
-        if _NON_CHAT.search(mid):
-            _set_setup(state="error", model=mid,
-                       message=f"設定モデル {alias} はチャット非対応です。VIVE_CHAT_MODEL を見直してください。")
-            return
-        if getattr(model, "is_cached", False):
-            _set_setup(state="loading", phase="load", progress=100, model=mid,
-                       message="モデルを読み込んでいます…")
-        else:
-            _set_setup(state="downloading", phase="model", progress=0, model=mid,
-                       message=f"AIモデル（{alias}）をダウンロード中…")
-
-            def cb(percent):
-                try:
-                    _set_setup(progress=float(percent))
-                except Exception:
-                    pass
-            model.download(cb)
-            _set_setup(state="loading", phase="load", progress=100,
-                       message="モデルを読み込んでいます…")
-        model.load()
+        _prepare_catalog_model(mgr, chat_alias, phase="model", label="AIモデル")
     except Exception as exc:
         _set_setup(state="error",
                    message=f"モデルの準備に失敗しました: {exc}. "
-                           f"`foundry model run {config.CHAT_MODEL}` を一度お試しください。")
+                           f"`foundry model run {chat_alias}` を一度お試しください。")
         return
+
+    if translate_alias and translate_alias != chat_alias:
+        try:
+            _prepare_catalog_model(mgr, translate_alias, phase="translate",
+                                   label="和訳・添削モデル")
+        except Exception as exc:
+            _set_setup(state="error",
+                       message=f"和訳・添削モデルの準備に失敗しました: {exc}. "
+                               f"`foundry model run {translate_alias}` を一度お試しください。")
+            return
 
     # Refresh the OpenAI client so chat uses the freshly loaded model.
     init()
@@ -667,14 +893,198 @@ def _safe_progress(p):
         pass
 
 
+# --- Model catalog: list / download (for the settings UI) ------------------
+
+def _model_kind(model_id: str) -> str:
+    """Classify a catalog model id into 'speech' | 'chat' | 'other'."""
+    if re.search(r"(whisper|speech|transcrib|nemotron-speech)", model_id, re.I):
+        return "speech"
+    if _NON_CHAT.search(model_id):
+        return "other"
+    return "chat"
+
+
+def _iter_catalog(manager):
+    """Yield (model_obj, id) for every model the SDK catalog exposes."""
+    seen: set[str] = set()
+    for name in ("list_catalog_models", "list_models", "get_models",
+                 "get_cached_models", "get_loaded_models"):
+        fn = getattr(manager.catalog, name, None)
+        if not callable(fn):
+            continue
+        try:
+            items = fn()
+        except Exception:
+            continue
+        for m in items or []:
+            mid = getattr(m, "id", "") or getattr(m, "alias", "")
+            if mid and mid not in seen:
+                seen.add(mid)
+                yield m, mid
+
+
+def list_models() -> dict[str, Any]:
+    """Return catalog models grouped for the settings UI.
+
+    {"online": bool, "note": str,
+     "selected": {"chat":..., "translate":..., "transcribe":...},
+     "models": [{"id","alias","task","kind","cached","loaded"}]}
+    """
+    selected = {
+        "chat": eff_chat_model(),
+        "translate": eff_translate_model(),
+        "transcribe": eff_transcribe_model(),
+    }
+    mgr, err = _sdk_manager(initialize=True)
+    if mgr is None:
+        return {"online": False,
+                "note": "Foundry Local SDK が利用できないため、モデル一覧を取得できません。",
+                "detail": err or "", "selected": selected, "models": []}
+
+    loaded_ids: set[str] = set()
+    try:
+        getter = getattr(mgr.catalog, "get_loaded_models", None)
+        for m in (getter() if callable(getter) else []) or []:
+            mid = getattr(m, "id", "") or getattr(m, "alias", "")
+            if mid:
+                loaded_ids.add(mid)
+    except Exception:
+        pass
+
+    models = []
+    try:
+        for m, mid in _iter_catalog(mgr):
+            task = (getattr(m, "task", "") or getattr(m, "task_type", "") or "")
+            models.append({
+                "id": mid,
+                "alias": getattr(m, "alias", "") or "",
+                "task": str(task),
+                "kind": _model_kind(mid),
+                "cached": bool(getattr(m, "is_cached", False)),
+                "loaded": mid in loaded_ids,
+            })
+    except Exception as exc:
+        return {"online": True, "note": f"モデル一覧の取得に失敗しました: {exc}",
+                "selected": selected, "models": []}
+
+    models.sort(key=lambda x: (x["kind"] != "chat", not x["cached"], x["id"]))
+    return {"online": True, "note": "", "selected": selected, "models": models}
+
+
+def download_model_async(alias: str, *, kind: str = "chat") -> dict[str, Any]:
+    """Download (and load chat/translate) a catalog model in the background.
+
+    Reuses the _setup progress channel so the existing /api/ai/setup-state
+    polling and overlay show the download. ``kind`` controls the label and
+    whether the model is loaded into the chat client afterwards.
+    """
+    global _setup_thread
+    alias = (alias or "").strip()
+    if not alias:
+        raise ValueError("model alias is required")
+    with _setup_lock:
+        if _setup["state"] in ("checking", "preparing", "downloading", "loading"):
+            return dict(_setup)
+        if _setup_thread is not None and _setup_thread.is_alive():
+            return dict(_setup)
+        _setup.update(state="checking", progress=0, phase="model",
+                      model=alias, message=f"{alias} を準備しています…", detail="")
+        _setup_thread = threading.Thread(
+            target=_run_download, args=(alias, kind), daemon=True)
+        _setup_thread.start()
+        return dict(_setup)
+
+
+def _find_catalog_model(manager, ident: str):
+    """Resolve a catalog model by full variant id OR short alias.
+
+    The SDK splits these: ``catalog.get_model(alias)`` resolves a short alias
+    (e.g. ``qwen2.5-1.5b``) and returns a multi-variant Model, while
+    ``catalog.get_model_variant(id)`` resolves a full variant id (e.g.
+    ``qwen2.5-1.5b-instruct-generic-cpu:4``). We try the variant lookup first
+    because the settings UI sends full ids, then fall back to the alias form.
+    """
+    cat = manager.catalog
+    # 1) Exact variant-id lookup (handles the full '...-cpu:4' ids from the UI).
+    getv = getattr(cat, "get_model_variant", None)
+    if callable(getv):
+        try:
+            m = getv(ident)
+            if m is not None:
+                return m
+        except Exception:
+            pass
+    # 2) Short-alias lookup.
+    try:
+        m = cat.get_model(ident)
+        if m is not None:
+            return m
+    except Exception:
+        pass
+    # 3) Scan the catalog matching id/alias (and a base alias without ':<n>').
+    key = ident.lower()
+    base = key.split(":", 1)[0]
+    for m, mid in _iter_catalog(manager):
+        low = mid.lower()
+        malias = (getattr(m, "alias", "") or "").lower()
+        if low == key or malias == key or low == base or malias == base:
+            return m
+    # 4) Last resort: alias form derived from the base id.
+    if base and base != key:
+        try:
+            return cat.get_model(base)
+        except Exception:
+            pass
+    return None
+
+
+def _run_download(alias: str, kind: str) -> None:
+    """Background worker for download_model_async."""
+    mgr, err = _sdk_manager(initialize=True)
+    if mgr is None:
+        _set_setup(state="error",
+                   message=f"ローカルAIサービスに接続できません: {err or ''}")
+        return
+    label = {"chat": "AIモデル", "translate": "和訳・添削モデル",
+             "transcribe": "音声認識モデル"}.get(kind, "AIモデル")
+    try:
+        model = _find_catalog_model(mgr, alias)
+        if model is None:
+            _set_setup(state="error",
+                       message=f"{label}「{alias}」がカタログに見つかりませんでした。"
+                               "モデル名を確認してください。")
+            return
+        mid = getattr(model, "id", "") or alias
+        if not getattr(model, "is_cached", False):
+            _set_setup(state="downloading", phase="model", progress=0, model=mid,
+                       message=f"{label}（{alias}）をダウンロード中…")
+            model.download(lambda p: _safe_progress(p))
+        # Load chat/translate models so they're ready to serve immediately.
+        if kind in ("chat", "translate") and _model_kind(mid) != "speech":
+            _set_setup(state="loading", phase="model", progress=100, model=mid,
+                       message=f"{label}を読み込んでいます…")
+            model.load()
+    except Exception as exc:
+        _set_setup(state="error",
+                   message=f"{label}の準備に失敗しました: {exc}. "
+                           f"`foundry model run {alias}` を一度お試しください。")
+        return
+    # Refresh the chat client so a freshly downloaded model is picked up.
+    if kind in ("chat", "translate"):
+        init()
+    _set_setup(state="ready", progress=100, phase="done",
+               message=f"{label}（{alias}）の準備が完了しました。")
+
+
 def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,
-          max_tokens: int = 512, json_mode: bool = False) -> str | None:
+          max_tokens: int = 512, json_mode: bool = False,
+          model: str | None = None) -> str | None:
     """Low-level chat call. Returns None when offline so callers can fall back."""
     if _client is None:
         init()
     if _client is None:
         return None
-    base: dict[str, Any] = dict(model=_model, messages=messages,
+    base: dict[str, Any] = dict(model=(model or _model), messages=messages,
                                 temperature=temperature, max_tokens=max_tokens)
     # Try with JSON mode first (if requested), then retry plain — some local
     # models reject response_format. Either way callers tolerate plain text.
@@ -725,15 +1135,20 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
         [{"role": "system", "content": instruction},
          {"role": "user", "content": text}],
         temperature=0.2, max_tokens=300, json_mode=True,
+        model=(_translate_model or config.TRANSLATE_MODEL or None),
     )
     if raw:
         parsed = _safe_json(raw)
         if parsed and parsed.get("translation"):
+            if mode != "word" and _looks_untranslated(text, str(parsed.get("translation", ""))):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
             parsed.setdefault("note", "")
             return {"source": text, "online": True, **parsed}
         # Model returned plain text (no JSON): use it directly as the translation.
         cleaned = _plain_text(raw)
         if cleaned:
+            if mode != "word" and _looks_untranslated(text, cleaned):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
             return {"source": text, "translation": cleaned, "note": "", "online": True}
 
     if glossary:
@@ -746,6 +1161,53 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
             "online": False, "offline_fallback": True}
 
 
+def _translation_failed(source: str, note: str) -> dict[str, Any]:
+    extra = (" VIVE_TRANSLATE_MODEL に日本語対応の大きめのチャットモデルを指定すると改善できます。"
+             if not config.TRANSLATE_MODEL else f" 現在の翻訳モデル: {config.TRANSLATE_MODEL}")
+    return {"source": source, "translation": "", "note": note + extra,
+            "online": False, "translation_failed": True}
+
+
+def _looks_untranslated(source: str, translated: str) -> bool:
+    src = _norm_text(source)
+    out = _norm_text(translated)
+    if not src or not out:
+        return False
+    if src == out:
+        return True
+    # Japanese translations should normally contain Japanese characters. If the
+    # model emits mostly ASCII and shares most words with the source, it copied.
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", translated):
+        return False
+    src_words = set(re.findall(r"[a-z']+", src.lower()))
+    out_words = set(re.findall(r"[a-z']+", out.lower()))
+    if len(src_words) >= 3 and src_words:
+        overlap = len(src_words & out_words) / max(1, len(src_words))
+        return overlap >= 0.72
+    return False
+
+
+def _norm_text(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().strip('"“”')).strip()
+
+
+_JP_CHARS = re.compile(r"[぀-ヿ㐀-鿿ｦ-ﾟ]")
+
+
+def _is_mostly_japanese(s: str) -> bool:
+    """True when the text is predominantly Japanese (kana/kanji) rather than English.
+
+    Used to detect when a model put Japanese in the English-only ``story`` field
+    (or swapped the English/Japanese fields).
+    """
+    s = s or ""
+    jp = len(_JP_CHARS.findall(s))
+    latin = len(re.findall(r"[A-Za-z]", s))
+    if jp == 0:
+        return False
+    return jp >= latin
+
+
 def tutor_reply(history: list[dict[str, str]], scenario: str = "",
                 level: str = "beginner", name: str = "Vivi",
                 gender: str = "female") -> dict[str, Any]:
@@ -755,29 +1217,160 @@ def tutor_reply(history: list[dict[str, str]], scenario: str = "",
         f"You are '{name}', a warm, encouraging {g} English conversation partner for a "
         f"Japanese {level} learner. Stay strictly in the role-play scenario: {scenario or 'free talk'}. "
         "Rules: (1) Reply in short, natural English suited to the learner's level. "
-        "(2) If the learner's last message had a notable mistake, add ONE gentle correction. "
-        "(3) Always end with a simple follow-up question to keep the conversation going. "
+        "(2) Always provide reply_ja, a natural Japanese translation of your English reply. "
+        "(3) Check the learner's latest English carefully for spelling, word choice, grammar, "
+        "missing words, unnatural phrasing, or Japanese-English literal wording. If there is any "
+        "issue, put a concise Japanese explanation in correction, including the better phrase. "
+        "If it is fully natural, set correction to an empty string. "
+        "(4) Always include one short, practical Japanese tip in tip. "
+        "(5) Always end the English reply with a simple follow-up question to keep the conversation going. "
         "Return ONLY JSON: {\"reply\":\"English reply\", \"reply_ja\":\"返信の和訳\", "
-        "\"correction\":\"訂正(無ければ空文字)\", \"tip\":\"短い学習ヒント(任意)\"}."
+        "\"correction\":\"訂正や改善点(無ければ空文字)\", \"tip\":\"短い学習ヒント\"}."
     )
     messages = [{"role": "system", "content": sys}] + history
     raw = _chat(messages, temperature=0.6, max_tokens=400, json_mode=True)
+    learner_text = _last_user_text(history)
     if raw:
         parsed = _safe_json(raw)
         if parsed and parsed.get("reply"):
             for k in ("reply_ja", "correction", "tip"):
                 parsed.setdefault(k, "")
+            parsed["reply_ja"] = _ensure_reply_ja(parsed["reply"], parsed.get("reply_ja", ""))
+            review = _review_learner_text(learner_text, level)
+            if review.get("correction") and not parsed.get("correction"):
+                parsed["correction"] = review["correction"]
+            if review.get("tip") and not parsed.get("tip"):
+                parsed["tip"] = review["tip"]
             return {"online": True, **parsed}
         # Plain-text reply (model didn't emit JSON): use it as Vivi's reply.
         cleaned = _plain_text(raw)
         if cleaned:
-            return {"online": True, "reply": cleaned, "reply_ja": "",
-                    "correction": "", "tip": ""}
+            review = _review_learner_text(learner_text, level)
+            return {"online": True, "reply": cleaned, "reply_ja": _ensure_reply_ja(cleaned, ""),
+                    "correction": review.get("correction", ""), "tip": review.get("tip", "")}
     return {
         "online": False,
         "reply": "(AI offline) Let's keep practising! Start Foundry Local to chat with Vivi.",
         "reply_ja": "(AIオフライン) Foundry Local を起動すると会話できます。",
         "correction": "", "tip": "",
+    }
+
+
+def _last_user_text(history: list[dict[str, str]]) -> str:
+    for msg in reversed(history or []):
+        if msg.get("role") == "user":
+            return (msg.get("content") or "").strip()
+    return ""
+
+
+def _ensure_reply_ja(reply: str, current: str = "") -> str:
+    if (current or "").strip() and not _looks_untranslated(reply, current):
+        return current.strip()
+    if not (reply or "").strip():
+        return ""
+    tr = translate(reply, "sentence")
+    text = (tr.get("translation") or "").strip()
+    if text and not text.startswith("(AIオフライン"):
+        return text
+    note = tr.get("note") or "和訳を生成できませんでした。"
+    return f"（{note}）"
+
+
+def _review_learner_text(text: str, level: str = "beginner") -> dict[str, str]:
+    text = (text or "").strip()
+    if not text:
+        return {"correction": "", "tip": ""}
+
+    local = _local_chat_feedback(text)
+    sys = (
+        "You are an English writing coach for a Japanese learner. Review ONLY the learner's latest message. "
+        "Find spelling mistakes, wrong word choice, grammar mistakes, missing articles/prepositions, or unnatural phrasing. "
+        "If there is any issue, give one concise Japanese correction with a better English phrase. "
+        "If the sentence is natural and correct, set correction to an empty string. "
+        "Return ONLY JSON: {\"correction\":\"日本語の訂正説明。Better: ...\", \"tip\":\"短い日本語ヒント\"}."
+    )
+    raw = _chat(
+        [{"role": "system", "content": sys},
+         {"role": "user", "content": f"LEVEL: {level}\nLEARNER: {text}"}],
+        temperature=0.1, max_tokens=240, json_mode=True,
+        model=(_translate_model or config.TRANSLATE_MODEL or None),
+    )
+    parsed = _safe_json(raw or "")
+    correction = (parsed or {}).get("correction", "")
+    tip = (parsed or {}).get("tip", "")
+    correction = str(correction or "").strip()
+    tip = str(tip or "").strip()
+    if local.get("correction"):
+        if correction:
+            correction = f"{local['correction']} / {correction}"
+        else:
+            correction = local["correction"]
+    if local.get("tip") and not tip:
+        tip = local["tip"]
+    return {"correction": correction, "tip": tip}
+
+
+def _local_chat_feedback(text: str) -> dict[str, str]:
+    low = text.lower()
+    checks = [
+        (r"\bgoed\b", "goed は不規則動詞なので went が自然です。Better: I went ..."),
+        (r"\beated\b", "eated ではなく ate を使います。Better: I ate ..."),
+        (r"\bbuyed\b", "buyed ではなく bought を使います。Better: I bought ..."),
+        (r"\bspeaked\b", "speaked ではなく spoke を使います。Better: I spoke ..."),
+        (r"\bwrited\b", "writed ではなく wrote を使います。Better: I wrote ..."),
+        (r"\bteached\b", "teached ではなく taught を使います。Better: taught"),
+        (r"\bstuding\b", "studing は綴りが違います。Better: studying"),
+        (r"\bbecouse\b", "becouse は綴りが違います。Better: because"),
+        (r"\bfreind\b", "freind は綴りが違います。Better: friend"),
+        (r"\brecieve\b", "recieve は綴りが違います。Better: receive"),
+        (r"\bi am agree\b", "I am agree ではなく I agree が自然です。"),
+        (r"\bi very like\b", "I very like ではなく I really like が自然です。"),
+        (r"\bpeoples\b", "people は通常それ自体で複数扱いです。Better: people"),
+        (r"\binformations\b", "information は数えられない名詞です。Better: information"),
+        (r"\badvices\b", "advice は数えられない名詞です。Better: advice"),
+    ]
+    for pat, correction in checks:
+        if re.search(pat, low):
+            return {"correction": correction, "tip": "不規則動詞や数えられない名詞は、形が変わりやすいので注意しましょう。"}
+    return {"correction": "", "tip": ""}
+
+
+def chat_suggestions(history: list[dict[str, str]], scenario: str = "",
+                     level: str = "beginner") -> dict[str, Any]:
+    """Generate short candidate replies when the learner is stuck."""
+    sys = (
+        "You help a Japanese English learner continue a role-play conversation. "
+        f"Scenario: {scenario or 'free talk'}. Learner level: {level}. "
+        "Create 3 short, natural English replies the learner can choose from. "
+        "Keep them easy to say aloud and relevant to the latest assistant message. "
+        "Return ONLY JSON: {\"suggestions\":[{\"en\":\"English sentence\","
+        "\"ja\":\"自然な日本語訳\",\"note\":\"短い使いどころ\"}]}."
+    )
+    raw = _chat(
+        [{"role": "system", "content": sys}] + history[-10:],
+        temperature=0.5, max_tokens=420, json_mode=True,
+    )
+    if raw:
+        parsed = _safe_json(raw)
+        items = parsed.get("suggestions") if parsed else None
+        if isinstance(items, list):
+            clean = []
+            for item in items[:3]:
+                if isinstance(item, dict) and item.get("en"):
+                    clean.append({
+                        "en": str(item.get("en", "")).strip(),
+                        "ja": str(item.get("ja", "")).strip(),
+                        "note": str(item.get("note", "")).strip(),
+                    })
+            if clean:
+                return {"online": True, "suggestions": clean}
+    return {
+        "online": False,
+        "suggestions": [
+            {"en": "Could you say that again?", "ja": "もう一度言ってもらえますか？", "note": "聞き返したいとき"},
+            {"en": "Let me think for a moment.", "ja": "少し考えさせてください。", "note": "返答に迷ったとき"},
+            {"en": "I think so, but I'm not sure.", "ja": "そう思いますが、確信はありません。", "note": "やわらかく意見を言うとき"},
+        ],
     }
 
 
@@ -826,6 +1419,131 @@ def check_speech(target: str, said: str, level: str = "beginner") -> dict[str, A
                     else "とても良いです！この調子で続けましょう。"),
         "missed_words": missed,
     }
+
+
+# --- Vocabulary story generation -------------------------------------------
+# Turn the learner's saved words into a short, themed passage so they can see
+# their vocabulary used naturally in context.
+
+_STORY_FORMATS = {
+    "story": "a short, coherent story",
+    "dialogue": "a short, natural dialogue between two people (prefix each line "
+                "with the speaker's name and a colon)",
+    "diary": "a first-person diary entry",
+    "email": "a short, friendly email (with a greeting and sign-off)",
+}
+_STORY_FORMATS_JA = {
+    "story": "物語", "dialogue": "会話", "diary": "日記", "email": "メール",
+}
+def _force_english_story(words: list[str], theme: str, level: str,
+                         fmt_desc: str, len_desc: str) -> str:
+    """Second-pass generation that returns ONLY an English passage (no JSON).
+
+    Used when the first JSON attempt put Japanese in the English ``story`` field.
+    """
+    word_list = ", ".join(words)
+    sys = (
+        f"Write {fmt_desc} ({len_desc}) in ENGLISH ONLY for a Japanese {level} "
+        f"English learner, on the theme \"{theme}\". Use ALL of these words "
+        f"naturally: {word_list}. Output ONLY the English passage as plain text — "
+        "no Japanese, no labels, no JSON, no quotes."
+    )
+    raw = _chat(
+        [{"role": "system", "content": sys},
+         {"role": "user", "content": f"Words: {word_list}\nTheme: {theme}"}],
+        temperature=0.6, max_tokens=600,
+    )
+    text = _plain_text(raw or "")
+    return text if text and not _is_mostly_japanese(text) else ""
+
+
+_STORY_LENGTHS = {
+    "short": "2 to 3 sentences",
+    "medium": "a short paragraph of 4 to 6 sentences",
+    "long": "two short paragraphs",
+}
+
+
+def generate_story(words: list[str], theme: str = "", level: str = "beginner",
+                   fmt: str = "story", length: str = "short") -> dict[str, Any]:
+    """Write a short, themed English passage that uses the learner's words.
+
+    Returns {online, title, story, story_ja, used_words, vocab_notes, note}.
+    Falls back to a clear OFFLINE notice (rest of the UI keeps working).
+    """
+    words = [str(w).strip() for w in (words or []) if str(w).strip()]
+    if not words:
+        return {"online": _status["online"], "title": "", "story": "",
+                "story_ja": "", "used_words": [], "vocab_notes": [],
+                "note": "単語帳から単語を1つ以上選んでください。"}
+
+    fmt_desc = _STORY_FORMATS.get(fmt, _STORY_FORMATS["story"])
+    len_desc = _STORY_LENGTHS.get(length, _STORY_LENGTHS["short"])
+    theme_txt = (theme or "").strip() or "an everyday situation"
+    word_list = ", ".join(words)
+
+    sys = (
+        f"You are an English teacher writing practice material for a Japanese "
+        f"{level} learner. Write {fmt_desc} ({len_desc}) on the theme: "
+        f"\"{theme_txt}\". You MUST use ALL of these vocabulary words naturally "
+        f"and correctly: {word_list}. Keep the English natural and suited to the "
+        "learner's level, and make the theme clearly recognisable. "
+        "CRITICAL: the \"story\" field MUST be written in ENGLISH only — never in "
+        "Japanese. The \"story_ja\" field is the Japanese translation of that "
+        "English passage. Do not swap them. "
+        "Return ONLY JSON: {\"title\":\"a short English title\", "
+        "\"story\":\"the passage IN ENGLISH\", "
+        "\"story_ja\":\"その英文の全文の自然な和訳\", "
+        "\"used_words\":[\"words you actually used\"], "
+        "\"vocab_notes\":[{\"en\":\"word\",\"ja\":\"この文脈での意味\"}]}."
+    )
+    raw = _chat(
+        [{"role": "system", "content": sys},
+         {"role": "user", "content": f"Words: {word_list}\nTheme: {theme_txt}"}],
+        temperature=0.7, max_tokens=700, json_mode=True,
+    )
+    if raw:
+        parsed = _safe_json(raw)
+        if parsed and parsed.get("story"):
+            story = str(parsed.get("story", "")).strip()
+            story_ja = str(parsed.get("story_ja", "")).strip()
+            # Small models sometimes swap the fields (English in story_ja, Japanese
+            # in story). If story is mostly Japanese but story_ja is mostly English,
+            # un-swap them so the learner always sees an English passage.
+            if _is_mostly_japanese(story) and story_ja and not _is_mostly_japanese(story_ja):
+                story, story_ja = story_ja, story
+            # If story is still Japanese (no usable English anywhere), regenerate
+            # it plainly in English so we never show a Japanese "story".
+            if _is_mostly_japanese(story):
+                regenerated = _force_english_story(words, theme_txt, level, fmt_desc, len_desc)
+                if regenerated:
+                    story, story_ja = regenerated, ""
+            if not story_ja or _looks_untranslated(story, story_ja):
+                story_ja = _ensure_reply_ja(story, "")
+            notes = parsed.get("vocab_notes")
+            clean_notes = []
+            if isinstance(notes, list):
+                for n in notes:
+                    if isinstance(n, dict) and n.get("en"):
+                        clean_notes.append({"en": str(n.get("en", "")).strip(),
+                                            "ja": str(n.get("ja", "")).strip()})
+            used = parsed.get("used_words")
+            used = [str(u).strip() for u in used if str(u).strip()] if isinstance(used, list) else words
+            return {"online": True, "title": str(parsed.get("title", "")).strip(),
+                    "story": story, "story_ja": story_ja,
+                    "used_words": used or words, "vocab_notes": clean_notes, "note": ""}
+        cleaned = _plain_text(raw)
+        if cleaned:
+            if _is_mostly_japanese(cleaned):
+                cleaned = _force_english_story(words, theme_txt, level, fmt_desc, len_desc) or cleaned
+            return {"online": True, "title": "", "story": cleaned,
+                    "story_ja": _ensure_reply_ja(cleaned, ""),
+                    "used_words": words, "vocab_notes": [], "note": ""}
+
+    return {"online": False, "title": "", "story": "", "story_ja": "",
+            "used_words": words, "vocab_notes": [],
+            "note": "AIオフラインのため文章を生成できません。Foundry Local を起動すると、"
+                    "登録した単語を使ったオリジナルの文章を作れます。"}
 
 
 # --- Small utilities -------------------------------------------------------

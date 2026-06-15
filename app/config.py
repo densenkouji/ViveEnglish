@@ -37,6 +37,10 @@ FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "notneeded")
 # Model aliases. Foundry Local resolves an alias to the best variant for the
 # current hardware, so we keep them configurable.
 CHAT_MODEL = os.getenv("VIVE_CHAT_MODEL", "qwen2.5-1.5b")
+# Optional model dedicated to Japanese translation / correction. Leave empty to
+# reuse CHAT_MODEL. Set this to a larger Japanese-capable chat model when small
+# models copy English instead of translating.
+TRANSLATE_MODEL = os.getenv("VIVE_TRANSLATE_MODEL", "").strip()
 # Speech-to-text uses a Whisper model via the SDK's file-based audio client.
 TRANSCRIBE_MODEL = os.getenv("VIVE_TRANSCRIBE_MODEL", "whisper-base")
 

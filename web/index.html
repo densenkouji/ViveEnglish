@@ -18,6 +18,7 @@
     <nav class="mainnav">
       <button data-nav="home" class="navbtn">ホーム</button>
       <button data-nav="lessons" class="navbtn">レッスン</button>
+      <button data-nav="words" class="navbtn">単語帳</button>
       <button data-nav="progress" class="navbtn">進捗</button>
       <button data-nav="profile" class="navbtn">設定</button>
     </nav>
@@ -56,6 +57,7 @@
       <div class="setup-pct"><span id="setupPct">0%</span><span id="setupDetail"></span></div>
       <p class="setup-note">初回のみ、ローカルAIモデルをダウンロードします。完了後はオフラインで高速に動作します。</p>
       <div class="setup-actions">
+        <button id="setupBackground" class="btn ghost sm">バックグラウンドで続ける</button>
         <button id="setupSkip" class="btn ghost sm">今はオフラインで使う</button>
       </div>
     </div>

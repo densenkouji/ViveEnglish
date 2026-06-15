@@ -84,6 +84,7 @@ Foundry Local をそのポートで立ち上げて自動接続します。右上
 | `VIVE_FOUNDRY_HOST` | `127.0.0.1` | バインド先ホスト |
 | `VIVE_AUTOLOAD_MODEL` | `1` | キャッシュ済みチャットモデルを起動時に自動ロード |
 | `VIVE_CHAT_MODEL` | `qwen2.5-1.5b` | 翻訳・対話・採点に使うモデル（`foundry model list`で確認） |
+| `VIVE_TRANSLATE_MODEL` | （未設定） | 和訳・添削だけ別モデルにしたいとき指定。未設定なら `VIVE_CHAT_MODEL` を使う |
 | `VIVE_TRANSCRIBE_MODEL` | `whisper-base` | 発話チェックの音声認識(STT)モデル。Whisper系を推奨（`whisper-tiny`/`small`等も可） |
 | `FOUNDRY_BASE_URL` | （未設定） | 外部で起動済みの Foundry Local に**手動接続**したいとき（指定すると自動起動より優先） |
 
@@ -107,6 +108,9 @@ foundry model list --filter task=chat-completion   # チャット対応モデル
 # 例: 0.5B の軽量テキストモデルを使う
 export VIVE_CHAT_MODEL=qwen2.5-0.5b      # PowerShell: $env:VIVE_CHAT_MODEL="qwen2.5-0.5b"
 ```
+
+小さいモデルで和訳が英文のまま返る場合は、日本語に強い大きめの chat モデルを取得し、
+`VIVE_TRANSLATE_MODEL` に指定してください。会話は軽量モデル、和訳・添削だけ大きめのモデルに分けられます。
 
 万一 text 非対応のモデルしか見つからない場合、「AI」状態に警告メッセージが表示されます。
 

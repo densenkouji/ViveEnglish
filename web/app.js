@@ -160,7 +160,7 @@ routes.home = () => {
   <div class="stat-row">
     <div class="card stat"><div class="v">${done}/${total}</div><div class="l">完了レッスン</div></div>
     <div class="card stat"><div class="v">${streak}<span style="font-size:1rem">日</span></div><div class="l">連続学習</div></div>
-    <div class="card stat"><div class="v">${savedN}</div><div class="l">単語帳</div></div>
+    <div class="card stat clickable" onclick="location.hash='#words'"><div class="v">${savedN}</div><div class="l">単語帳</div></div>
     <div class="card stat"><div class="v">${state.themes.length}</div><div class="l">テーマ</div></div>
   </div>
 
@@ -341,9 +341,15 @@ function panelChat(L) {
   return `<div class="panel" data-panel="chat">
     <div class="hint">💡 AIの「${esc(t.name)}」とロールプレイ。状況：<b>${esc(L.roleplay.scenario_ja)}</b><br>英語で返信すると、やさしい訂正と和訳がもらえます。<span class="muted">（講師は設定で変更できます）</span></div>
     <div class="chat-box">
+      <div class="chat-tools">
+        <button class="mini" id="chatToggleJa">${chatShowJa ? "和訳を非表示" : "和訳を表示"}</button>
+        <button class="mini" id="chatHelp">ヘルプ</button>
+      </div>
       <div class="chat-log" id="chatLog"></div>
+      <div class="chat-help hidden" id="chatHelpBox"></div>
       <div class="chat-input">
         <input id="chatText" placeholder="英語で入力してEnter…" autocomplete="off" />
+        <button class="btn sm ghost" id="chatVoice">🎤 音声</button>
         <button class="btn" id="chatSend">送信</button>
       </div>
     </div>
@@ -551,9 +557,11 @@ async function doSpeechCheck(btn, L) {
 
 // ---------- chat ----------
 function withName(s, name) { return (s || "").split("Vivi").join(name); }
+let chatShowJa = true;
 
 function initChat(L) {
   const log = $("#chatLog");
+  const helpBox = $("#chatHelpBox");
   const t = tutor();
   const history = [];
   const opener = withName(L.roleplay.opener, t.name);
@@ -572,14 +580,55 @@ function initChat(L) {
         messages: history.slice(-12), scenario: L.roleplay.scenario,
         level: state.profile.level, tutor_name: t.name, gender: t.gender,
       });
+      if (r.reply && !r.reply_ja) {
+        r.reply_ja = await translateChatReply(r.reply, L.id);
+      }
       thinking.remove();
       addMsg(log, "vivi", r.reply, r.reply_ja, r.correction, r.tip);
       history.push({ role: "assistant", content: r.reply });
       if (!r.online) toast("AIオフライン：Foundry Localを起動すると対話できます");
     } catch { thinking.remove(); addMsg(log, "vivi", "(通信エラー)"); }
   }
+  async function showHelp() {
+    helpBox.classList.remove("hidden");
+    helpBox.innerHTML = `<div class="muted">参考文案を生成中…</div>`;
+    try {
+      const r = await post("/chat/help", {
+        messages: history.slice(-12), scenario: L.roleplay.scenario, level: state.profile.level,
+      });
+      helpBox.innerHTML = (r.suggestions || []).map((s, i) => `
+        <button class="suggestion" data-suggest="${esc(s.en)}">
+          <b>${i + 1}. ${esc(s.en)}</b>
+          ${s.ja ? `<span>${esc(s.ja)}</span>` : ""}
+          ${s.note ? `<em>${esc(s.note)}</em>` : ""}
+        </button>`).join("") || `<div class="muted">候補を作れませんでした。</div>`;
+      if (!r.online) toast("AIオフライン：定型文を表示しています");
+    } catch {
+      helpBox.innerHTML = `<div class="muted">参考文案の生成に失敗しました。</div>`;
+    }
+  }
   $("#chatSend").addEventListener("click", send);
   $("#chatText").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+  $("#chatToggleJa").addEventListener("click", () => {
+    chatShowJa = !chatShowJa;
+    $$(".mja", log).forEach(x => x.classList.toggle("hidden", !chatShowJa));
+    $("#chatToggleJa").textContent = chatShowJa ? "和訳を非表示" : "和訳を表示";
+  });
+  $("#chatHelp").addEventListener("click", showHelp);
+  helpBox.addEventListener("click", e => {
+    const b = e.target.closest("[data-suggest]"); if (!b) return;
+    $("#chatText").value = b.dataset.suggest;
+    $("#chatText").focus();
+  });
+  $("#chatVoice").addEventListener("click", () => toggleChatVoice($("#chatVoice")));
+}
+async function translateChatReply(text, lessonId) {
+  try {
+    const t = await post("/translate", { text, mode: "sentence", lesson_id: lessonId });
+    return t.translation || (t.note ? `（${t.note}）` : "");
+  } catch {
+    return "";
+  }
 }
 function addMsg(log, who, text, ja, fix, tip) {
   const t = tutor();
@@ -593,7 +642,7 @@ function addMsg(log, who, text, ja, fix, tip) {
   const div = document.createElement("div");
   div.className = "msg " + who;
   div.innerHTML = esc(text)
-    + (ja ? `<div class="mja">${esc(ja)}</div>` : "")
+    + (ja ? `<div class="mja ${chatShowJa ? "" : "hidden"}">${esc(ja)}</div>` : "")
     + (fix ? `<div class="fix">✏️ ${esc(fix)}</div>` : "")
     + (tip ? `<div class="fix">💡 ${esc(tip)}</div>` : "");
   if (who === "vivi" && text !== "…") {
@@ -602,6 +651,43 @@ function addMsg(log, who, text, ja, fix, tip) {
   }
   row.appendChild(div);
   log.appendChild(row); log.scrollTop = log.scrollHeight; return row;
+}
+
+async function toggleChatVoice(btn) {
+  if (mediaRec && mediaRec.state === "recording") { mediaRec.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia) { toast("音声入力に未対応のブラウザです。"); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRec = new MediaRecorder(stream); recChunks = [];
+    mediaRec.ondataavailable = e => recChunks.push(e.data);
+    mediaRec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      btn.classList.remove("recording"); btn.textContent = "🎤 音声";
+      try {
+        btn.textContent = "認識中…";
+        const wav = await blobToWav16k(new Blob(recChunks, { type: "audio/webm" }));
+        const fd = new FormData(); fd.append("audio", wav, "clip.wav");
+        const r = await fetch(API + "/speech/transcribe", { method: "POST", body: fd });
+        const j = await r.json();
+        if (j.speech) { state.ai.speech = j.speech; setAiBadge(); }
+        if (j.online && j.text) {
+          $("#chatText").value = j.text;
+          $("#chatText").focus();
+        } else {
+          toast(j.note || "音声認識オフライン");
+        }
+      } catch {
+        toast("音声入力に失敗しました");
+      } finally {
+        btn.textContent = "🎤 音声";
+      }
+    };
+    mediaRec.start();
+    btn.classList.add("recording");
+    btn.textContent = "■ 停止";
+  } catch {
+    toast("マイクを使用できません。");
+  }
 }
 
 // ---------- quiz ----------
@@ -673,11 +759,6 @@ routes.progress = async () => {
       <div class="bar" style="margin-top:.5rem"><span style="width:${Math.round(100*c/ls.length)}%"></span></div></div>`;
   }).join("");
 
-  const words = (data.saved_words || []).map(w => `
-    <div class="word-row"><span class="w">${esc(w.word)}</span><span class="m">${esc(w.meaning || "")}</span>
-    <button class="mini" data-del="${esc(w.word)}">削除</button>
-    <button class="mini" data-say="${esc(w.word)}">🔊</button></div>`).join("") || `<p class="sub">読書中に単語をタップ→★で保存すると、ここに単語帳が貯まります。</p>`;
-
   $("#app").innerHTML = `
     <h1>学習の進捗</h1>
     <p class="sub">続けることがいちばんの近道。3つの柱を並行して回しましょう。</p>
@@ -685,20 +766,209 @@ routes.progress = async () => {
       <div class="card stat"><div class="v">${done.length}/${total}</div><div class="l">完了</div></div>
       <div class="card stat"><div class="v">${streak}日</div><div class="l">連続学習</div></div>
       <div class="card stat"><div class="v">${avg}</div><div class="l">平均クイズ点</div></div>
-      <div class="card stat"><div class="v">${(data.saved_words||[]).length}</div><div class="l">単語帳</div></div>
+      <div class="card stat clickable" onclick="location.hash='#words'"><div class="v">${(data.saved_words||[]).length}</div><div class="l">単語帳</div></div>
     </div>
     <h2>この60日の学習</h2>
     <div class="card" style="padding:1.2rem"><div class="heat" id="heat"></div></div>
-    <h2>テーマ別の達成度</h2>${byTheme}
-    <h2>マイ単語帳</h2><div class="word-list">${words}</div>`;
+    <h2>テーマ別の達成度</h2>${byTheme}`;
 
   renderHeat(data.activity);
-  $("#app").addEventListener("click", async e => {
-    const d = e.target.closest("[data-del]"); const s = e.target.closest("[data-say]");
-    if (d) { await api(`/words/${encodeURIComponent(d.dataset.del)}`, { method: "DELETE" }); routes.progress(); }
-    if (s) speak(s.dataset.say);
-  });
 };
+
+// ---------- WORDS (My Vocabulary) ----------
+const STORY_FORMATS = [
+  { key: "story", label: "📖 物語" },
+  { key: "dialogue", label: "💬 会話" },
+  { key: "diary", label: "📔 日記" },
+  { key: "email", label: "✉️ メール" },
+];
+const STORY_LENGTHS = [
+  { key: "short", label: "短い（2〜3文）" },
+  { key: "medium", label: "ふつう（4〜6文）" },
+  { key: "long", label: "長い（2段落）" },
+];
+// Suggested themes; the learner can also type a free theme.
+const STORY_THEME_PRESETS = [
+  "学校での一日", "旅行先での出来事", "ビジネスの会議", "レストランでの注文",
+  "週末の過ごし方", "日本文化の紹介", "友だちとの会話", "将来の夢",
+];
+// Keeps the selected word set and options across re-renders within the screen.
+const wordsUI = { selected: new Set(), theme: "", format: "story", length: "short" };
+
+routes.words = async () => {
+  const data = await api("/progress");
+  state.savedWords = data.saved_words;
+  state.profile = state.profile || data.profile;
+  const words = data.saved_words || [];
+
+  // Drop selections for words that no longer exist.
+  const existing = new Set(words.map(w => w.word));
+  [...wordsUI.selected].forEach(w => { if (!existing.has(w)) wordsUI.selected.delete(w); });
+
+  const list = words.map(w => `
+    <div class="word-row ${wordsUI.selected.has(w.word) ? "picked" : ""}" data-word="${esc(w.word)}">
+      <label class="word-pick">
+        <input type="checkbox" data-pick="${esc(w.word)}" ${wordsUI.selected.has(w.word) ? "checked" : ""} />
+      </label>
+      <span class="w">${esc(w.word)}</span>
+      <span class="m">${esc(w.meaning || "")}</span>
+      <button class="mini" data-say="${esc(w.word)}">🔊</button>
+      <button class="mini" data-del="${esc(w.word)}">削除</button>
+    </div>`).join("") ||
+    `<p class="sub">レッスンの「読む・聞く」で英単語をタップ→<b>★ 単語帳に保存</b>すると、ここに単語が貯まります。</p>`;
+
+  const themeChips = STORY_THEME_PRESETS.map(t =>
+    `<button class="chip sm" data-themechip="${esc(t)}">${esc(t)}</button>`).join("");
+  const fmtBtns = STORY_FORMATS.map(f =>
+    `<button class="seg ${wordsUI.format === f.key ? "active" : ""}" data-fmt="${f.key}">${f.label}</button>`).join("");
+  const lenBtns = STORY_LENGTHS.map(l =>
+    `<button class="seg ${wordsUI.length === l.key ? "active" : ""}" data-len="${l.key}">${esc(l.label)}</button>`).join("");
+
+  $("#app").innerHTML = `
+    <h1>マイ単語帳</h1>
+    <p class="sub">保存した単語を復習し、選んだ単語を使ったオリジナルの文章をAIに作ってもらえます。</p>
+
+    <div class="words-layout">
+      <section>
+        <div class="words-head">
+          <h2 style="margin:0">登録した単語（${words.length}）</h2>
+          <div class="words-head-actions">
+            <button class="mini" id="selAll">すべて選択</button>
+            <button class="mini" id="selNone">選択解除</button>
+          </div>
+        </div>
+        <div class="word-list" id="wordList">${list}</div>
+      </section>
+
+      <section class="card gen-panel">
+        <h2 style="margin-top:0">📝 単語から文章を作る</h2>
+        <p class="muted" style="margin:.2rem 0 .9rem">選んだ単語（<b id="pickCount">${wordsUI.selected.size}</b>個）を使い、テーマに沿った英文と和訳を生成します。</p>
+
+        <div class="field-label">テーマ</div>
+        <input id="storyTheme" class="theme-input" placeholder="例：旅行先での出来事（自由入力）" value="${esc(wordsUI.theme)}" />
+        <div class="theme-chips">${themeChips}</div>
+
+        <div class="field-label">形式</div>
+        <div class="seg-row" id="fmtRow">${fmtBtns}</div>
+
+        <div class="field-label">長さ</div>
+        <div class="seg-row" id="lenRow">${lenBtns}</div>
+
+        <button class="btn" id="genStory" style="margin-top:1.1rem">✨ 文章を生成</button>
+        <div id="storyOut" class="story-out"></div>
+      </section>
+    </div>`;
+
+  const wordList = $("#wordList");
+  const refreshPickUI = () => {
+    $("#pickCount").textContent = wordsUI.selected.size;
+    $$(".word-row", wordList).forEach(r =>
+      r.classList.toggle("picked", wordsUI.selected.has(r.dataset.word)));
+  };
+
+  wordList.addEventListener("click", async e => {
+    const del = e.target.closest("[data-del]");
+    const say = e.target.closest("[data-say]");
+    if (say) { speak(say.dataset.say); return; }
+    if (del) {
+      await api(`/words/${encodeURIComponent(del.dataset.del)}`, { method: "DELETE" });
+      wordsUI.selected.delete(del.dataset.del);
+      routes.words();
+    }
+  });
+  wordList.addEventListener("change", e => {
+    const pick = e.target.closest("[data-pick]");
+    if (!pick) return;
+    if (pick.checked) wordsUI.selected.add(pick.dataset.pick);
+    else wordsUI.selected.delete(pick.dataset.pick);
+    refreshPickUI();
+  });
+  $("#selAll").addEventListener("click", () => {
+    words.forEach(w => wordsUI.selected.add(w.word));
+    $$("[data-pick]", wordList).forEach(c => c.checked = true);
+    refreshPickUI();
+  });
+  $("#selNone").addEventListener("click", () => {
+    wordsUI.selected.clear();
+    $$("[data-pick]", wordList).forEach(c => c.checked = false);
+    refreshPickUI();
+  });
+
+  const themeInput = $("#storyTheme");
+  themeInput.addEventListener("input", () => { wordsUI.theme = themeInput.value; });
+  $$("[data-themechip]").forEach(c => c.addEventListener("click", () => {
+    wordsUI.theme = c.dataset.themechip; themeInput.value = wordsUI.theme;
+  }));
+  $("#fmtRow").addEventListener("click", e => {
+    const b = e.target.closest("[data-fmt]"); if (!b) return;
+    wordsUI.format = b.dataset.fmt;
+    $$("#fmtRow .seg").forEach(x => x.classList.toggle("active", x === b));
+  });
+  $("#lenRow").addEventListener("click", e => {
+    const b = e.target.closest("[data-len]"); if (!b) return;
+    wordsUI.length = b.dataset.len;
+    $$("#lenRow .seg").forEach(x => x.classList.toggle("active", x === b));
+  });
+  $("#genStory").addEventListener("click", generateStory);
+};
+
+async function generateStory() {
+  const picked = [...wordsUI.selected];
+  const out = $("#storyOut");
+  if (!picked.length) { toast("単語を1つ以上選んでください。"); return; }
+  const btn = $("#genStory");
+  btn.disabled = true; const label = btn.textContent; btn.textContent = "生成中…";
+  out.innerHTML = `<div class="muted">AIが「${esc(wordsUI.theme || "おまかせ")}」のテーマで文章を作成中…</div>`;
+  try {
+    const r = await post("/words/story", {
+      words: picked, theme: wordsUI.theme,
+      level: (state.profile && state.profile.level) || "beginner",
+      format: wordsUI.format, length: wordsUI.length,
+    });
+    if (!r.story) {
+      out.innerHTML = `<div class="notice">${esc(r.note || "文章を生成できませんでした。")}</div>`;
+      return;
+    }
+    const usedSet = new Set((r.used_words || []).map(w => w.toLowerCase()));
+    const storyHtml = highlightWords(r.story, picked);
+    const notes = (r.vocab_notes || []).map(n =>
+      `<li><b>${esc(n.en)}</b> — ${esc(n.ja)}</li>`).join("");
+    out.innerHTML = `
+      <div class="card story-card">
+        ${r.title ? `<div class="story-title">${esc(r.title)}</div>` : ""}
+        <div class="story-en">${storyHtml}</div>
+        <button class="mini" id="sayStory">🔊 読み上げ</button>
+        <div class="story-ja-wrap">
+          <button class="mini" id="toggleStoryJa">和訳を表示</button>
+          <div class="story-ja hidden">${esc(r.story_ja)}</div>
+        </div>
+        ${notes ? `<div class="field-label">使った単語</div><ul class="story-notes">${notes}</ul>` : ""}
+        ${!r.online ? `<div class="note" style="color:#9a6a3f">（AIオフライン）</div>` : ""}
+      </div>`;
+    $("#sayStory").addEventListener("click", () => speak(r.story.replace(/<[^>]+>/g, "")));
+    $("#toggleStoryJa").addEventListener("click", () => {
+      const ja = $(".story-ja", out);
+      const hidden = ja.classList.toggle("hidden");
+      $("#toggleStoryJa").textContent = hidden ? "和訳を表示" : "和訳を非表示";
+    });
+    toast("文章を生成しました");
+  } catch {
+    out.innerHTML = `<div class="notice">文章の生成に失敗しました。AI接続を確認してください。</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+
+// Wrap any of the learner's target words found in the passage with a highlight.
+function highlightWords(text, words) {
+  const safe = esc(text);
+  const uniq = [...new Set(words.map(w => w.trim()).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!uniq.length) return safe;
+  const re = new RegExp(`\\b(${uniq.join("|")})\\b`, "gi");
+  return safe.replace(re, '<mark class="vw">$1</mark>');
+}
 
 function computeStreak(activity) {
   const days = new Set(activity.map(a => new Date(a.created_at * 1000).toDateString()));
@@ -766,7 +1036,7 @@ routes.profile = async () => {
       <div class="ai-row">
         <div>
           <div class="ai-kind">会話・翻訳・採点</div>
-          <div class="muted">${esc(state.ai.model || "モデル未確認")}</div>
+          <div class="muted">会話: ${esc(state.ai.model || "モデル未確認")}<br>和訳・添削: ${esc(state.ai.translate_model || state.ai.model || "モデル未確認")}</div>
         </div>
         <b class="${chatOk ? "ok-text" : "warn-text"}">${chatOk ? "接続中 ✓" : "未接続"}</b>
       </div>
@@ -776,7 +1046,7 @@ routes.profile = async () => {
           <div class="ai-kind">音声認識（Whisper）</div>
           <div class="muted">${esc(speech.model || "モデル未確認")} / ${esc(speechCache)}</div>
         </div>
-        <b class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "利用可能 ✓" : "未接続"}</b>
+        <b class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "接続中 ✓" : "未接続"}</b>
       </div>
       <div class="ai-note">${esc(speech.note || "")}</div>
       <p class="sub" style="margin:.8rem 0 0">録音して発話は音声認識（Whisper）で文字起こししたあと、会話・翻訳モデルで採点します。どちらの状態もここで確認できます。</p>
@@ -785,6 +1055,12 @@ routes.profile = async () => {
         <button class="btn sm ghost" id="refreshSpeech">音声認識を確認</button>
         <button class="btn sm" id="prepareAi">AI/Whisperを準備</button>
       </div>
+    </div>
+
+    <h2>AIモデルの選択・追加</h2>
+    <p class="sub">用途ごとに使用するモデルを切り替えたり、新しいモデルをダウンロードできます。ダウンロード済み（緑）のモデルはすぐに利用できます。</p>
+    <div class="card model-panel" id="modelPanel">
+      <div class="muted">モデル一覧を読み込み中…</div>
     </div>`;
 
   $$(".style-opt").forEach(o => o.addEventListener("click", () => {
@@ -820,7 +1096,139 @@ routes.profile = async () => {
     toast("AI/Whisperの準備を開始しました");
     initAiSetup();
   });
+
+  loadModelPanel();
 };
+
+// ---------- AI model management (settings) ----------
+const MODEL_KINDS = [
+  { kind: "chat", label: "会話モデル", hint: "AI対話・採点に使用", filter: m => m.kind === "chat" },
+  { kind: "translate", label: "和訳・添削モデル", hint: "空欄なら会話モデルを使用", filter: m => m.kind === "chat", allowDefault: true },
+  { kind: "transcribe", label: "音声認識モデル（Whisper）", hint: "録音した発話の文字起こし", filter: m => m.kind === "speech" },
+];
+
+async function loadModelPanel() {
+  const panel = $("#modelPanel");
+  if (!panel) return;
+  let data;
+  try { data = await api("/ai/models"); }
+  catch { panel.innerHTML = `<div class="muted">モデル一覧を取得できませんでした。</div>`; return; }
+  if (!data.online) {
+    panel.innerHTML = `<div class="notice">${esc(data.note || "Foundry Local SDK が利用できないため、モデルを管理できません。")}</div>`;
+    return;
+  }
+  const models = data.models || [];
+  const sel = data.selected || {};
+
+  const rows = MODEL_KINDS.map(k => {
+    // Only cached (downloaded) models can be selected for use.
+    const opts = models.filter(k.filter).filter(m => m.cached);
+    const cur = sel[k.kind] || "";
+    const empty = opts.length === 0
+      ? `<div class="muted" style="font-size:.82rem">ダウンロード済みのモデルがありません。下のカタログから取得してください。</div>`
+      : "";
+    const optionTags = (k.allowDefault ? [`<option value="">（会話モデルと同じ）</option>`] : [])
+      .concat(opts.map(m => {
+        const isSel = m.id === cur || m.alias === cur;
+        return `<option value="${esc(m.id)}" ${isSel ? "selected" : ""}>${esc(m.id)}${m.loaded ? " ・使用中" : ""}</option>`;
+      })).join("");
+    return `
+      <div class="model-row">
+        <div class="model-row-head">
+          <b>${esc(k.label)}</b><span class="muted">${esc(k.hint)}</span>
+        </div>
+        <div class="model-row-ctl">
+          ${opts.length ? `<select class="model-select" data-kind="${k.kind}">${optionTags}</select>` : empty}
+        </div>
+      </div>`;
+  }).join("");
+
+  // List of all models with download buttons for not-yet-cached ones.
+  const catalog = models.map(m => {
+    const badge = m.cached
+      ? `<span class="model-badge ok">ダウンロード済み</span>`
+      : `<span class="model-badge">未取得</span>`;
+    const kindJa = m.kind === "speech" ? "音声" : m.kind === "chat" ? "会話" : "その他";
+    const act = m.cached
+      ? (m.loaded ? `<span class="muted">使用中</span>` : "")
+      : `<button class="btn sm" data-dl="${esc(m.id)}" data-dlkind="${m.kind === "speech" ? "transcribe" : "chat"}">⬇ ダウンロード</button>`;
+    return `
+      <div class="catalog-row" data-row="${esc(m.id)}">
+        <div><span class="model-id">${esc(m.id)}</span> <span class="model-kind">${kindJa}</span></div>
+        <div class="catalog-act">${badge}${act}</div>
+      </div>`;
+  }).join("") || `<div class="muted">利用可能なモデルがありません。</div>`;
+
+  panel.innerHTML = `
+    <div class="model-selects">${rows}</div>
+    <div class="field-label" style="margin-top:1rem">カタログ（ダウンロード）</div>
+    <div class="catalog-list">${catalog}</div>`;
+
+  $$(".model-select", panel).forEach(s => s.addEventListener("change", async () => {
+    try {
+      state.ai = await post("/ai/models/select", { kind: s.dataset.kind, alias: s.value });
+      setAiBadge();
+      toast("モデルを切り替えました");
+      loadModelPanel();
+    } catch { toast("モデルの切り替えに失敗しました"); }
+  }));
+  $$("[data-dl]", panel).forEach(b => b.addEventListener("click", () => {
+    startModelDownload(b.dataset.dl, b.dataset.dlkind, b);
+  }));
+}
+
+// Download a catalog model and show inline progress on the button itself,
+// polling /api/ai/setup-state until it finishes (works even while AI is online).
+let _dlPoll = null;
+async function startModelDownload(alias, kind, btn) {
+  if (_dlPoll) { toast("別のダウンロードが進行中です"); return; }
+  const setLabel = (txt) => { btn.disabled = true; btn.textContent = txt; };
+  setLabel("開始中…");
+  let st;
+  try { st = await post("/ai/models/download", { alias, kind }); }
+  catch { toast("ダウンロードを開始できませんでした"); btn.disabled = false; btn.textContent = "⬇ ダウンロード"; return; }
+  if (st.state === "error") {
+    btn.disabled = false; btn.textContent = "⬇ 再試行";
+    toast(st.message || "ダウンロードに失敗しました");
+    return;
+  }
+  toast("ダウンロードを開始しました");
+
+  const renderDl = (s) => {
+    // Only reflect progress for the model we're downloading.
+    if (s.model && s.model !== alias && !String(s.model).includes(alias)) return;
+    if (s.state === "downloading") {
+      const p = Math.max(0, Math.min(100, Math.round(s.progress || 0)));
+      setLabel(`DL中 ${p}%`);
+    } else if (s.state === "loading") {
+      setLabel("読み込み中…");
+    } else if (s.state === "checking" || s.state === "preparing") {
+      setLabel("準備中…");
+    }
+  };
+  renderDl(st);
+
+  _dlPoll = setInterval(async () => {
+    let s;
+    try { s = await api("/ai/setup-state"); } catch { return; }
+    if (["ready", "offline", "error"].includes(s.state)) {
+      clearInterval(_dlPoll); _dlPoll = null;
+      if (s.state === "error") {
+        btn.disabled = false; btn.textContent = "⬇ 再試行";
+        toast(s.message || "ダウンロードに失敗しました");
+      } else {
+        toast(`${alias} のダウンロードが完了しました`);
+        if (kind === "chat" || kind === "translate") {
+          state.ai = await post("/ai/reconnect", {}).catch(() => state.ai);
+          setAiBadge();
+        }
+        loadModelPanel();   // refresh: model now cached & selectable
+      }
+      return;
+    }
+    renderDl(s);
+  }, 1200);
+}
 
 // ---------- audio: webm/opus blob -> 16k mono WAV ----------
 async function blobToWav16k(blob) {
@@ -878,6 +1286,12 @@ const SETUP_LABELS = {
 async function initAiSetup() {
   const e = _setupEls();
   $("#setupSkip").addEventListener("click", () => { stopSetup(); e.box.classList.add("hidden"); });
+  // Keep downloading/loading in the background; just hide the overlay so the
+  // learner can use pre-authored content while the model finishes preparing.
+  $("#setupBackground").addEventListener("click", () => {
+    e.box.classList.add("hidden");
+    toast("AIの準備はバックグラウンドで続行します");
+  });
   // If AI is already online and ready, skip entirely.
   if (state.ai.online && state.ai.note === "ready" && state.ai.speech?.online && state.ai.speech?.cached) return;
 
@@ -898,15 +1312,22 @@ function stopSetup() { if (_setupPoll) { clearInterval(_setupPoll); _setupPoll =
 async function pollSetup() {
   let st;
   try { st = await api("/ai/setup-state"); } catch { return; }
-  renderSetup(st);
   if (["ready", "offline", "error"].includes(st.state)) {
     stopSetup();
     if (st.state === "ready") {
+      renderSetup(st);
       state.ai = await post("/ai/reconnect", {}); setAiBadge();
       setTimeout(() => _setupEls().box.classList.add("hidden"), 1400);
       toast("AIの準備が完了しました");
+      if ($("#modelPanel")) loadModelPanel();   // refresh download/cached state
+    } else if (st.state === "offline" && (state.ai.online || state.ai.speech?.online)) {
+      _setupEls().box.classList.add("hidden");
+    } else {
+      renderSetup(st);
     }
+    return;
   }
+  renderSetup(st);
 }
 
 function renderSetup(st) {
@@ -922,6 +1343,9 @@ function renderSetup(st) {
   if (determinate) { e.fill.style.width = p + "%"; e.pct.textContent = p + "%"; }
   else { e.pct.textContent = ""; }
   e.detail.textContent = st.detail || "";
+  const working = ["checking", "preparing", "downloading", "loading"].includes(st.state);
+  const bg = $("#setupBackground");
+  if (bg) bg.classList.toggle("hidden", !working);
   $("#setupSkip").textContent = (st.state === "error") ? "オフラインで続ける" : "今はオフラインで使う";
   if (st.state === "ready") { e.fill.style.width = "100%"; e.pct.textContent = "100%"; }
 }

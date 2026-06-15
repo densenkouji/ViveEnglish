@@ -22,7 +22,9 @@ app = FastAPI(title=config.APP_NAME, version=config.APP_VERSION)
 @app.on_event("startup")
 def _startup() -> None:
     database.init_db()
-    foundry.init()  # best-effort probe; never fatal
+    # Probe/start Foundry Local in the background so the web server answers
+    # requests immediately instead of blocking on the (slow) AI service spin-up.
+    foundry.init_async()
     if config.MANAGE_FOUNDRY and config.AUTOLOAD_MODEL:
         foundry.ensure_model_async()  # first-launch model download (non-blocking)
 
@@ -42,6 +44,12 @@ class ChatReq(BaseModel):
     level: str = "beginner"
     tutor_name: str = "Vivi"
     gender: str = "female"
+
+
+class ChatHelpReq(BaseModel):
+    messages: list[dict[str, str]]
+    scenario: str = ""
+    level: str = "beginner"
 
 
 class SpeechReq(BaseModel):
@@ -72,6 +80,24 @@ class SaveWordReq(BaseModel):
     lesson_id: str | None = None
 
 
+class StoryReq(BaseModel):
+    words: list[str]
+    theme: str = ""
+    level: str = "beginner"
+    format: str = "story"        # story|dialogue|diary|email
+    length: str = "short"        # short|medium|long
+
+
+class ModelSelectReq(BaseModel):
+    kind: str            # chat|translate|transcribe
+    alias: str | None = None   # empty/None resets to the configured default
+
+
+class ModelDownloadReq(BaseModel):
+    alias: str
+    kind: str = "chat"   # chat|translate|transcribe
+
+
 # ---------------------------------------------------------------------------
 # Meta / health
 # ---------------------------------------------------------------------------
@@ -83,7 +109,7 @@ def health() -> dict[str, Any]:
 
 @app.post("/api/ai/reconnect")
 def ai_reconnect() -> dict[str, Any]:
-    foundry.init()
+    foundry.reconnect(force_managed=True)
     return foundry.status()
 
 
@@ -96,6 +122,30 @@ def ai_setup_state() -> dict[str, Any]:
 def ai_setup() -> dict[str, Any]:
     """Start (or report) the first-launch model/EP download."""
     return foundry.ensure_model_async()
+
+
+@app.get("/api/ai/models")
+def ai_models() -> dict[str, Any]:
+    """List catalog models (cached/available) for the settings UI."""
+    return foundry.list_models()
+
+
+@app.post("/api/ai/models/select")
+def ai_models_select(req: ModelSelectReq) -> dict[str, Any]:
+    """Choose which model to use for chat / translate / transcribe."""
+    try:
+        return foundry.set_model_preference(req.kind, req.alias)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/ai/models/download")
+def ai_models_download(req: ModelDownloadReq) -> dict[str, Any]:
+    """Download (and load) a catalog model in the background, with progress."""
+    try:
+        return foundry.download_model_async(req.alias, kind=req.kind)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/speech/status")
@@ -155,6 +205,11 @@ def chat(req: ChatReq) -> dict[str, Any]:
         database.log_activity("chat", detail=req.scenario)
     return foundry.tutor_reply(req.messages, req.scenario, req.level,
                                name=req.tutor_name, gender=req.gender)
+
+
+@app.post("/api/chat/help")
+def chat_help(req: ChatHelpReq) -> dict[str, Any]:
+    return foundry.chat_suggestions(req.messages, req.scenario, req.level)
 
 
 @app.post("/api/speech/check")
@@ -219,6 +274,18 @@ def add_word(req: SaveWordReq) -> dict[str, Any]:
 def remove_word(word: str) -> dict[str, Any]:
     database.delete_word(word)
     return {"ok": True, "saved_words": database.get_saved_words()}
+
+
+@app.post("/api/words/story")
+def words_story(req: StoryReq) -> dict[str, Any]:
+    """Generate a short, themed passage that uses the learner's saved words."""
+    result = foundry.generate_story(
+        req.words, theme=req.theme, level=req.level,
+        fmt=req.format, length=req.length,
+    )
+    if result.get("online"):
+        database.log_activity("study", detail=f"story:{req.theme[:80]}")
+    return result
 
 
 # ---------------------------------------------------------------------------
