@@ -446,7 +446,7 @@ $("#glossSave").addEventListener("click", async () => {
   toast("単語帳に保存しました ★");
 });
 document.addEventListener("click", e => {
-  if (!pop.contains(e.target) && !e.target.closest(".w")) pop.classList.add("hidden");
+  if (!pop.contains(e.target) && !e.target.closest(".w, .reading-token.word")) pop.classList.add("hidden");
 });
 
 async function showGloss(anchor, text, mode, lessonId) {
@@ -1051,11 +1051,16 @@ const readingUI = {
   topic: "daily habits and learning",
   length: "medium",
   translation: "",
+  translationSource: "",
   note: "",
+  initialized: false,
 };
 
 routes.reading = async () => {
-  if (!readingUI.text) readingUI.text = READING_DEFAULT_TEXT;
+  if (!readingUI.initialized) {
+    readingUI.text = READING_DEFAULT_TEXT;
+    readingUI.initialized = true;
+  }
   const level = (state.profile && state.profile.level) || "beginner";
   const lenBtns = READING_LENGTHS.map(l =>
     `<button class="seg ${readingUI.length === l.key ? "active" : ""}" data-readlen="${l.key}">${esc(l.label)}</button>`).join("");
@@ -1073,47 +1078,58 @@ routes.reading = async () => {
         <textarea id="readingText" class="reading-textarea" rows="12" spellcheck="false">${esc(readingUI.text)}</textarea>
         <div class="reading-actions">
           <button class="btn" id="analyzeReading">解析する</button>
+          <button class="btn ghost" id="translateReading">和訳を生成</button>
           <button class="btn accent" id="genReading">AIで長文を生成</button>
           <button class="btn ghost sm" id="sampleReading">サンプル</button>
           <button class="btn ghost sm" id="clearReading">クリア</button>
         </div>
         <div id="readingAiNote" class="muted">${esc(readingUI.note)}</div>
-        ${readingUI.translation ? `
-          <div class="reading-ja-box">
-            <button class="mini" id="toggleReadingJa">和訳を表示</button>
-            <div class="reading-ja hidden">${esc(readingUI.translation)}</div>
-          </div>` : ""}
+        <div class="reading-ja-box ${readingUI.translation ? "" : "hidden"}" id="readingJaBox">
+          <button class="mini" id="toggleReadingJa">和訳を表示</button>
+          <div class="reading-ja hidden">${esc(readingUI.translation)}</div>
+        </div>
       </section>
 
       <section class="reading-result" id="readingResult"></section>
     </div>`;
 
-  $("#readingText").addEventListener("input", e => { readingUI.text = e.target.value; });
+  $("#readingText").addEventListener("input", e => {
+    readingUI.text = e.target.value;
+    if (readingUI.translationSource && readingUI.translationSource !== readingUI.text.trim()) {
+      readingUI.translation = "";
+      readingUI.translationSource = "";
+      syncReadingTranslationBox();
+    }
+  });
   $("#readingTopic").addEventListener("input", e => { readingUI.topic = e.target.value; });
   $("#readingLenRow").addEventListener("click", e => {
     const b = e.target.closest("[data-readlen]"); if (!b) return;
     readingUI.length = b.dataset.readlen;
     $$("#readingLenRow .seg").forEach(x => x.classList.toggle("active", x === b));
   });
-  $("#analyzeReading").addEventListener("click", () => {
-    readingUI.text = $("#readingText").value.trim();
-    if (!readingUI.text) { toast("解析する英文を入力してください。"); return; }
-    renderReadingAnalysis(readingUI.text);
-  });
+  $("#analyzeReading").addEventListener("click", analyzeReadingInput);
+  $("#translateReading").addEventListener("click", () => translateReadingText(true));
   $("#sampleReading").addEventListener("click", () => {
-    readingUI.text = READING_DEFAULT_TEXT; readingUI.translation = "";
+    readingUI.text = READING_DEFAULT_TEXT;
+    readingUI.translation = "";
+    readingUI.translationSource = "";
     readingUI.note = "";
     $("#readingText").value = readingUI.text;
+    syncReadingTranslationBox(true);
     renderReadingAnalysis(readingUI.text);
   });
   $("#clearReading").addEventListener("click", () => {
-    readingUI.text = ""; readingUI.translation = "";
+    readingUI.text = "";
+    readingUI.translation = "";
+    readingUI.translationSource = "";
     readingUI.note = "";
     $("#readingText").value = "";
+    $("#readingAiNote").textContent = "";
+    syncReadingTranslationBox();
     $("#readingResult").innerHTML = `<div class="notice">英文を入力すると解析結果が表示されます。</div>`;
   });
   $("#genReading").addEventListener("click", () => generateReadingPassage(level));
-  $("#toggleReadingJa")?.addEventListener("click", () => {
+  $("#toggleReadingJa").addEventListener("click", () => {
     const box = $(".reading-ja");
     const hidden = box.classList.toggle("hidden");
     $("#toggleReadingJa").textContent = hidden ? "和訳を表示" : "和訳を非表示";
@@ -1121,6 +1137,51 @@ routes.reading = async () => {
 
   renderReadingAnalysis(readingUI.text);
 };
+
+async function analyzeReadingInput() {
+  readingUI.text = $("#readingText").value.trim();
+  if (!readingUI.text) { toast("解析する英文を入力してください。"); return; }
+  renderReadingAnalysis(readingUI.text);
+  if (readingUI.translationSource !== readingUI.text) {
+    await translateReadingText(false);
+  }
+}
+
+async function translateReadingText(showToast = true) {
+  const text = ($("#readingText")?.value || readingUI.text || "").trim();
+  if (!text) { toast("和訳する英文を入力してください。"); return; }
+  const btn = $("#translateReading");
+  const note = $("#readingAiNote");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "和訳中…";
+  note.textContent = "英文全体を和訳しています。";
+  try {
+    const r = await post("/translate", { text, mode: "sentence", lesson_id: null });
+    readingUI.translation = r.translation || "";
+    readingUI.translationSource = readingUI.translation ? text : "";
+    readingUI.note = r.note || (r.online ? "和訳を生成しました。" : "");
+    note.textContent = readingUI.note;
+    syncReadingTranslationBox();
+    if (showToast) toast(readingUI.translation ? "和訳を生成しました" : "和訳を取得できませんでした");
+  } catch {
+    note.textContent = "和訳に失敗しました。AI接続を確認してください。";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+function syncReadingTranslationBox(reveal = false) {
+  const box = $("#readingJaBox");
+  if (!box) return;
+  const ja = $(".reading-ja", box);
+  const toggle = $("#toggleReadingJa");
+  ja.textContent = readingUI.translation || "";
+  ja.classList.toggle("hidden", !reveal);
+  toggle.textContent = reveal ? "和訳を非表示" : "和訳を表示";
+  box.classList.toggle("hidden", !readingUI.translation);
+}
 
 async function generateReadingPassage(level) {
   const btn = $("#genReading");
@@ -1132,6 +1193,7 @@ async function generateReadingPassage(level) {
     const r = await requestReadingPassage(level);
     readingUI.text = r.passage || "";
     readingUI.translation = r.passage_ja || "";
+    readingUI.translationSource = readingUI.text;
     $("#readingText").value = readingUI.text;
     readingUI.note = r.note || (r.online ? "AI生成文を解析しました。" : "");
     toast(r.online ? "長文を生成しました" : "サンプル英文を表示しました");
