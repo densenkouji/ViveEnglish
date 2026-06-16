@@ -26,6 +26,16 @@ DATA_DIR = Path(os.getenv("VIVE_DATA_DIR", str(_default_data)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "viveenglish.db"
 
+# --- AI provider -----------------------------------------------------------
+# Chat/translation/grading use an OpenAI-compatible chat-completions API.
+# Foundry Local remains the default because it can also manage local models and
+# speech-to-text, but learners can point the app at Ollama or another compatible
+# endpoint from the settings screen.
+AI_PROVIDER = os.getenv("VIVE_AI_PROVIDER", "foundry").strip().lower()
+AI_BASE_URL = os.getenv("VIVE_AI_BASE_URL", "").strip()
+AI_API_KEY = os.getenv("VIVE_AI_API_KEY", "notneeded")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1").strip()
+
 # --- Foundry Local ---------------------------------------------------------
 # Foundry Local exposes an OpenAI-compatible endpoint on localhost.
 # If FOUNDRY_BASE_URL is set we use it directly; otherwise we try to discover

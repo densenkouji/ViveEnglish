@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,7 +25,7 @@ def _startup() -> None:
     # Probe/start Foundry Local in the background so the web server answers
     # requests immediately instead of blocking on the (slow) AI service spin-up.
     foundry.init_async()
-    if config.MANAGE_FOUNDRY and config.AUTOLOAD_MODEL:
+    if foundry.eff_ai_provider() == "foundry" and config.MANAGE_FOUNDRY and config.AUTOLOAD_MODEL:
         foundry.ensure_model_async()  # first-launch model download (non-blocking)
 
 
@@ -94,6 +94,11 @@ class ReadingPassageReq(BaseModel):
     length: str = "medium"       # medium|long|exam
 
 
+class ReadingAnalyzeReq(BaseModel):
+    text: str
+    level: str = "beginner"
+
+
 class ModelSelectReq(BaseModel):
     kind: str            # chat|translate|transcribe
     alias: str | None = None   # empty/None resets to the configured default
@@ -102,6 +107,18 @@ class ModelSelectReq(BaseModel):
 class ModelDownloadReq(BaseModel):
     alias: str
     kind: str = "chat"   # chat|translate|transcribe
+
+
+class AiProviderReq(BaseModel):
+    provider: str         # foundry|ollama|openai
+    base_url: str | None = None
+    api_key: str | None = None
+    chat_model: str | None = None
+    translate_model: str | None = None
+
+
+class AiTestReq(BaseModel):
+    kind: str = "chat"    # chat|translate
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +145,33 @@ def ai_setup_state() -> dict[str, Any]:
 def ai_setup() -> dict[str, Any]:
     """Start (or report) the first-launch model/EP download."""
     return foundry.ensure_model_async()
+
+
+@app.get("/api/ai/provider")
+def ai_provider() -> dict[str, Any]:
+    """Return the currently selected chat/translation provider."""
+    return foundry.provider_settings()
+
+
+@app.post("/api/ai/provider")
+def ai_provider_set(req: AiProviderReq) -> dict[str, Any]:
+    """Choose Foundry Local, Ollama, or another OpenAI-compatible endpoint."""
+    return foundry.set_ai_provider(
+        req.provider,
+        base_url=req.base_url,
+        api_key=req.api_key,
+        chat_model=req.chat_model,
+        translate_model=req.translate_model,
+    )
+
+
+@app.post("/api/ai/test")
+def ai_test(req: AiTestReq) -> dict[str, Any]:
+    """Run a real short completion against the currently selected AI model."""
+    try:
+        return foundry.test_model(req.kind)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/ai/models")
@@ -205,6 +249,15 @@ def translate(req: TranslateReq) -> dict[str, Any]:
     return foundry.translate(req.text, req.mode, glossary)
 
 
+@app.post("/api/translate/stream")
+def translate_stream(req: TranslateReq) -> StreamingResponse:
+    glossary = content_store.lesson_glossary(req.lesson_id) if req.lesson_id else None
+    return StreamingResponse(
+        foundry.translate_stream(req.text, req.mode, glossary),
+        media_type="application/x-ndjson",
+    )
+
+
 @app.post("/api/chat")
 def chat(req: ChatReq) -> dict[str, Any]:
     if req.messages:
@@ -213,9 +266,28 @@ def chat(req: ChatReq) -> dict[str, Any]:
                                name=req.tutor_name, gender=req.gender)
 
 
+@app.post("/api/chat/stream")
+def chat_stream(req: ChatReq) -> StreamingResponse:
+    if req.messages:
+        database.log_activity("chat", detail=req.scenario)
+    return StreamingResponse(
+        foundry.tutor_reply_stream(req.messages, req.scenario, req.level,
+                                   name=req.tutor_name, gender=req.gender),
+        media_type="application/x-ndjson",
+    )
+
+
 @app.post("/api/chat/help")
 def chat_help(req: ChatHelpReq) -> dict[str, Any]:
     return foundry.chat_suggestions(req.messages, req.scenario, req.level)
+
+
+@app.post("/api/chat/help/stream")
+def chat_help_stream(req: ChatHelpReq) -> StreamingResponse:
+    return StreamingResponse(
+        foundry.chat_suggestions_stream(req.messages, req.scenario, req.level),
+        media_type="application/x-ndjson",
+    )
 
 
 @app.post("/api/speech/check")
@@ -294,6 +366,15 @@ def words_story(req: StoryReq) -> dict[str, Any]:
     return result
 
 
+@app.post("/api/words/story/stream")
+def words_story_stream(req: StoryReq) -> StreamingResponse:
+    result = foundry.generate_story_stream(
+        req.words, theme=req.theme, level=req.level,
+        fmt=req.format, length=req.length,
+    )
+    return StreamingResponse(result, media_type="application/x-ndjson")
+
+
 @app.post("/api/reading/passage")
 def reading_passage(req: ReadingPassageReq) -> dict[str, Any]:
     """Generate a long-ish English passage for the reading assistant."""
@@ -303,6 +384,33 @@ def reading_passage(req: ReadingPassageReq) -> dict[str, Any]:
     if result.get("passage"):
         database.log_activity("study", detail=f"reading:{req.topic[:80]}")
     return result
+
+
+@app.post("/api/reading/passage/stream")
+def reading_passage_stream(req: ReadingPassageReq) -> StreamingResponse:
+    return StreamingResponse(
+        foundry.generate_reading_passage_stream(
+            req.topic, level=req.level, length=req.length,
+        ),
+        media_type="application/x-ndjson",
+    )
+
+
+@app.post("/api/reading/analyze")
+def reading_analyze(req: ReadingAnalyzeReq) -> dict[str, Any]:
+    """Analyse an English passage with the local LLM."""
+    result = foundry.analyze_reading_text(req.text, level=req.level)
+    if result.get("online"):
+        database.log_activity("study", detail=f"reading-analysis:{req.text[:80]}")
+    return result
+
+
+@app.post("/api/reading/analyze/stream")
+def reading_analyze_stream(req: ReadingAnalyzeReq) -> StreamingResponse:
+    return StreamingResponse(
+        foundry.analyze_reading_text_stream(req.text, level=req.level),
+        media_type="application/x-ndjson",
+    )
 
 
 # ---------------------------------------------------------------------------

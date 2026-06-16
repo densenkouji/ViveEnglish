@@ -26,6 +26,7 @@ import re
 import socket
 import tempfile
 import threading
+import time
 import wave
 from typing import Any
 
@@ -36,7 +37,9 @@ _base_url: str | None = None
 _model: str | None = None
 _translate_model: str | None = None
 _manager = None  # live foundry-local-sdk manager (when managed)
-_status: dict[str, Any] = {"online": False, "base_url": None, "model": None,
+_status: dict[str, Any] = {"online": False, "provider": "foundry",
+                           "provider_label": "Foundry Local",
+                           "base_url": None, "model": None,
                            "translate_model": None, "note": "not initialised",
                            "managed": False, "port": None}
 _lock = threading.Lock()
@@ -50,7 +53,13 @@ _setup_thread: "threading.Thread | None" = None
 
 
 def _base_status() -> dict[str, Any]:
-    return dict(_status)
+    st = dict(_status)
+    provider = eff_ai_provider()
+    st["provider"] = provider
+    st["provider_label"] = _provider_label(provider)
+    if provider != "foundry" and not st.get("base_url"):
+        st["base_url"] = eff_ai_base_url() or None
+    return st
 
 
 # --- User-selected model preferences (persisted in profile.settings) --------
@@ -64,17 +73,147 @@ def _prefs() -> dict[str, Any]:
         return {}
 
 
+_PROVIDER_LABELS = {
+    "foundry": "Foundry Local",
+    "ollama": "Ollama",
+    "openai": "OpenAI互換",
+}
+
+
+def _provider_key(value: str | None) -> str:
+    key = (value or "").strip().lower().replace("-", "_")
+    if key in ("ollama",):
+        return "ollama"
+    if key in ("openai", "custom", "custom_openai", "openai_compatible",
+               "openai_compat", "compatible"):
+        return "openai"
+    return "foundry"
+
+
+def _provider_label(provider: str | None) -> str:
+    return _PROVIDER_LABELS.get(_provider_key(provider), "Foundry Local")
+
+
+def eff_ai_provider() -> str:
+    return _provider_key(_prefs().get("ai_provider") or config.AI_PROVIDER)
+
+
+def eff_ai_base_url() -> str:
+    provider = eff_ai_provider()
+    prefs = _prefs()
+    saved = (prefs.get("ai_base_url") or "").strip()
+    if provider == "ollama":
+        return saved or config.AI_BASE_URL or config.OLLAMA_BASE_URL
+    if provider == "openai":
+        return saved or config.AI_BASE_URL
+    return ""
+
+
+def eff_ai_api_key() -> str:
+    provider = eff_ai_provider()
+    saved = (_prefs().get("ai_api_key") or "").strip()
+    if provider == "foundry":
+        return saved or config.FOUNDRY_API_KEY
+    if provider == "ollama":
+        return saved or config.AI_API_KEY or "ollama"
+    return saved or config.AI_API_KEY
+
+
+def provider_settings() -> dict[str, Any]:
+    provider = eff_ai_provider()
+    base = eff_ai_base_url()
+    stored_key = (_prefs().get("ai_api_key") or "").strip()
+    env_key = "" if config.AI_API_KEY == "notneeded" else (config.AI_API_KEY or "").strip()
+    return {
+        "provider": provider,
+        "provider_label": _provider_label(provider),
+        "base_url": base,
+        "default_base_url": config.OLLAMA_BASE_URL if provider == "ollama" else config.AI_BASE_URL,
+        "has_api_key": bool(stored_key or env_key),
+        "status": status(),
+    }
+
+
+def set_ai_provider(provider: str, base_url: str | None = None,
+                    api_key: str | None = None,
+                    chat_model: str | None = None,
+                    translate_model: str | None = None) -> dict[str, Any]:
+    provider = _provider_key(provider)
+    settings = _prefs()
+    settings["ai_provider"] = provider
+    if base_url is not None:
+        base_url = base_url.strip()
+        if base_url:
+            settings["ai_base_url"] = _normalize(base_url)
+        else:
+            settings.pop("ai_base_url", None)
+    if api_key is not None:
+        api_key = api_key.strip()
+        if api_key:
+            settings["ai_api_key"] = api_key
+        else:
+            settings.pop("ai_api_key", None)
+    # Model choices are scoped to the provider they were made for so switching
+    # providers never carries a model that only exists on the other one.
+    if chat_model is not None or translate_model is not None:
+        store = _provider_model_store(settings, provider, create=True)
+        if chat_model is not None:
+            store["chat_model"] = chat_model.strip()
+        if translate_model is not None:
+            store["translate_model"] = translate_model.strip()
+    database.update_profile(settings=settings)
+    return reconnect()
+
+
+# --- Per-provider model preferences ----------------------------------------
+# Each provider (foundry/ollama/openai) keeps its OWN chat/translate/transcribe
+# model choice under settings["models_by_provider"][provider]. Storing them
+# globally used to leak a model from one provider into another (e.g. an Ollama
+# tag selected while on Foundry), which then asked the new provider for a model
+# it does not have.
+
+def _provider_model_store(settings: dict[str, Any], provider: str,
+                          *, create: bool = False) -> dict[str, Any]:
+    by = settings.get("models_by_provider")
+    if not isinstance(by, dict):
+        if not create:
+            return {}
+        by = {}
+        settings["models_by_provider"] = by
+    store = by.get(provider)
+    if not isinstance(store, dict):
+        if not create:
+            return {}
+        store = {}
+        by[provider] = store
+    return store
+
+
+def _model_pref(key: str, provider: str | None = None) -> str:
+    provider = provider or eff_ai_provider()
+    prefs = _prefs()
+    val = (_provider_model_store(prefs, provider).get(key) or "").strip()
+    if val:
+        return val
+    # Legacy top-level prefs predate per-provider scoping. Treat them as the
+    # historical default provider (foundry) so existing setups keep working,
+    # but never expose them to a different provider.
+    if provider == "foundry":
+        return (prefs.get(key) or "").strip()
+    return ""
+
+
 def eff_chat_model() -> str:
-    return (_prefs().get("chat_model") or "").strip() or config.CHAT_MODEL
+    return _model_pref("chat_model") or config.CHAT_MODEL
 
 
 def eff_translate_model() -> str:
     """Translate model preference; empty falls back to the chat model."""
-    return (_prefs().get("translate_model") or "").strip() or config.TRANSLATE_MODEL
+    return _model_pref("translate_model") or config.TRANSLATE_MODEL
 
 
 def eff_transcribe_model() -> str:
-    return (_prefs().get("transcribe_model") or "").strip() or config.TRANSCRIBE_MODEL
+    return _model_pref("transcribe_model") or config.TRANSCRIBE_MODEL
 
 
 def set_model_preference(kind: str, alias: str | None) -> dict[str, Any]:
@@ -84,7 +223,11 @@ def set_model_preference(kind: str, alias: str | None) -> dict[str, Any]:
     if not key:
         raise ValueError(f"unknown model kind: {kind}")
     settings = _prefs()
-    settings[key] = (alias or "").strip()
+    provider = eff_ai_provider()
+    store = _provider_model_store(settings, provider, create=True)
+    store[key] = (alias or "").strip()
+    # Drop any legacy global value so it can no longer shadow the scoped choice.
+    settings.pop(key, None)
     database.update_profile(settings=settings)
     # Reconnect so chat/translate immediately use the newly chosen model.
     if kind in ("chat", "translate"):
@@ -288,11 +431,22 @@ def _model_ref_matches(ref: str | None, model_id: str | None, alias: str | None 
     return False
 
 
+def _external_model_ref_matches(ref: str | None, model_id: str | None) -> bool:
+    """Exact match for providers where ':' is a model tag, not a variant suffix."""
+    return (ref or "").strip().lower() == (model_id or "").strip().lower()
+
+
 def _pick_chat_model(ids: list[str], manager=None) -> str | None:
     """Choose a text/chat-completion model, never a vision/embedding/audio one."""
     if not ids:
         return None
     alias = eff_chat_model().lower()
+    if manager is None and alias:
+        preferred = [m for m in ids
+                     if not _NON_CHAT.search(m)
+                     and _external_model_ref_matches(alias, m)]
+        if preferred:
+            return preferred[0]
     # 1) configured model — match ignoring the ':<n>' variant suffix on either
     # side, since /v1/models reports ids without it but prefs may carry it.
     preferred = [m for m in ids
@@ -324,6 +478,11 @@ def _resolve_configured_model(ids: list[str], configured: str) -> str | None:
     key = (configured or "").strip().lower()
     if not key:
         return None
+    if eff_ai_provider() != "foundry":
+        for mid in ids:
+            if _external_model_ref_matches(key, mid):
+                return mid
+        return configured
     for mid in ids:
         if _model_ref_matches(key, mid):
             return mid
@@ -439,6 +598,10 @@ def _discover_unmanaged() -> str | None:
 
 
 def _resolve_base_url() -> str | None:
+    provider = eff_ai_provider()
+    if provider != "foundry":
+        base = eff_ai_base_url()
+        return _normalize(base) if base else None
     # Reuse an already-running managed service rather than starting a new one.
     if _manager is not None and _base_url and _reachable(_base_url):
         return _base_url
@@ -460,6 +623,8 @@ def _resolve_base_url() -> str | None:
 def _force_managed_base_url() -> str | None:
     """Start/restart the SDK-managed web service and return its /v1 base URL."""
     global _manager, _base_url
+    if eff_ai_provider() != "foundry":
+        return None
     _manager = None
     managed = _start_managed()
     if managed:
@@ -477,10 +642,17 @@ def _ensure_loaded(model_id: str) -> bool:
     loaded, and a chat completion against an unloaded model fails with 400
     'Model ... is not loaded'. Load it via the SDK catalog if needed.
     """
-    if not model_id or _manager is None:
+    if not model_id:
+        return False
+    # The endpoint may have been discovered without us starting the SDK manager
+    # (unmanaged path). Acquire/initialise it so we can still load the model.
+    manager = _manager
+    if manager is None:
+        manager, _ = _sdk_manager(initialize=True)
+    if manager is None:
         return False
     try:  # pragma: no cover - depends on local install
-        m = _find_catalog_model(_manager, model_id)
+        m = _find_catalog_model(manager, model_id)
         if m is None:
             return False
         if getattr(m, "is_loaded", False):
@@ -492,14 +664,23 @@ def _ensure_loaded(model_id: str) -> bool:
         return False
 
 
+def _is_not_loaded_error(exc: Exception) -> bool:
+    """Detect Foundry Local's 'Model ... is not loaded' 400 response."""
+    msg = str(exc or "").lower()
+    return "is not loaded" in msg or "load the model" in msg
+
+
 def init() -> dict[str, Any]:
     """Probe / start Foundry Local. Safe to call repeatedly."""
     global _client, _base_url, _model, _translate_model, _status
     with _lock:
+        provider = eff_ai_provider()
         try:
             from openai import OpenAI
         except Exception as exc:
-            _status = {"online": False, "base_url": None, "model": None,
+            _status = {"online": False, "provider": provider,
+                       "provider_label": _provider_label(provider),
+                       "base_url": None, "model": None,
                        "translate_model": None,
                        "note": f"openai client unavailable: {exc}",
                        "managed": False, "port": None}
@@ -508,37 +689,46 @@ def init() -> dict[str, Any]:
         base = _resolve_base_url()
         if not base:
             _status.update(online=False, base_url=None, model=None,
-                           note="Foundry Local endpoint not available")
+                           provider=provider, provider_label=_provider_label(provider),
+                           managed=False if provider != "foundry" else _status.get("managed", False),
+                           note=(f"{_provider_label(provider)} の接続先URLが未設定です"
+                                 if provider != "foundry"
+                                 else "Foundry Local endpoint not available"))
             return _status
 
         chat_pref = eff_chat_model()
         translate_pref = eff_translate_model()
         model = chat_pref
         try:
-            client = OpenAI(base_url=base, api_key=config.FOUNDRY_API_KEY,
+            client = OpenAI(base_url=base, api_key=eff_ai_api_key(),
                             timeout=config.AI_TIMEOUT, max_retries=0)
             models = client.models.list()
             ids = [m.id for m in getattr(models, "data", [])]
-            picked = _pick_chat_model(ids, _manager)
+            picked = _pick_chat_model(ids, _manager if provider == "foundry" else None)
             if picked:
                 model = picked
             # Ensure the chosen chat model is actually loaded (cached-but-not-
             # loaded models are listed by /v1/models but reject completions).
-            _ensure_loaded(model)
+            if provider == "foundry":
+                _ensure_loaded(model)
             translate_model = _resolve_configured_model(ids, translate_pref) if translate_pref else model
-            if translate_model and translate_model != model:
+            if provider == "foundry" and translate_model and translate_model != model:
                 _ensure_loaded(translate_model)
             _client, _base_url, _model, _translate_model = client, base, model, translate_model
             note = "ready"
             if ids and _NON_CHAT.search(model or ""):
                 note = ("warning: selected model may not support chat. "
                         "設定画面でテキスト/チャット対応モデルを選んでください。")
-            _status.update(online=True, base_url=base, model=model,
+            _status.update(online=True, provider=provider,
+                           provider_label=_provider_label(provider),
+                           base_url=base, model=model,
                            translate_model=translate_model,
                            note=note)
         except Exception as exc:
             _client, _base_url, _model, _translate_model = None, base, model, (translate_pref or model)
-            _status.update(online=False, base_url=base, model=model,
+            _status.update(online=False, provider=provider,
+                           provider_label=_provider_label(provider),
+                           base_url=base, model=model,
                            translate_model=(translate_pref or model),
                            note=f"endpoint not reachable: {exc}")
         return _status
@@ -567,10 +757,14 @@ def init_async() -> None:
 def reconnect(force_managed: bool = False) -> dict[str, Any]:
     """Reconnect AI, optionally discarding stale discovered URLs."""
     global _client, _base_url, _model
-    if force_managed or (_status.get("base_url") and not _reachable(str(_status["base_url"]))):
+    provider = eff_ai_provider()
+    should_reset = _status.get("base_url") and not _reachable(str(_status["base_url"]))
+    if provider != _status.get("provider"):
+        should_reset = True
+    if force_managed or should_reset:
         _client = None
         _model = None
-        if config.MANAGE_FOUNDRY and not config.FOUNDRY_BASE_URL:
+        if provider == "foundry" and config.MANAGE_FOUNDRY and not config.FOUNDRY_BASE_URL:
             _force_managed_base_url()
     return init()
 
@@ -579,6 +773,74 @@ def status() -> dict[str, Any]:
     st = _base_status()
     st["speech"] = speech_status()
     return st
+
+
+def test_model(kind: str = "chat") -> dict[str, Any]:
+    """Run a tiny completion against the active chat/translation model."""
+    kind = (kind or "chat").strip().lower()
+    if kind not in ("chat", "translate"):
+        raise ValueError("kind must be chat or translate")
+
+    init()
+    provider = eff_ai_provider()
+    model = (_translate_model if kind == "translate" else _model) or _model
+    result: dict[str, Any] = {
+        "ok": False,
+        "online": bool(_status.get("online")),
+        "kind": kind,
+        "provider": provider,
+        "provider_label": _provider_label(provider),
+        "base_url": _base_url or _status.get("base_url"),
+        "model": model,
+        "elapsed_ms": None,
+        "sample": "",
+        "note": "",
+        "status": status(),
+    }
+    if _client is None or not _status.get("online"):
+        result["note"] = _status.get("note") or "AIに接続できません。"
+        return result
+    if not model:
+        result["note"] = "テスト対象のモデルが選択されていません。"
+        return result
+
+    if kind == "translate":
+        messages = [
+            {"role": "system", "content": "Translate English into natural Japanese. Reply with one short Japanese sentence only."},
+            {"role": "user", "content": "The book is on the desk."},
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": "Reply briefly in English."},
+            {"role": "user", "content": "Say OK if this model is working."},
+        ]
+
+    start = time.perf_counter()
+    try:
+        try:
+            resp = _client.chat.completions.create(
+                model=model, messages=messages, temperature=0, max_tokens=80)
+        except Exception as exc:
+            # Cached-but-not-loaded model: load it on demand and retry once.
+            if provider == "foundry" and _is_not_loaded_error(exc) and _ensure_loaded(model):
+                resp = _client.chat.completions.create(
+                    model=model, messages=messages, temperature=0, max_tokens=80)
+            else:
+                raise
+        content = (resp.choices[0].message.content or "").strip()
+        elapsed = int((time.perf_counter() - start) * 1000)
+        result.update(ok=bool(content), online=True, elapsed_ms=elapsed,
+                      sample=content[:500],
+                      note=("テスト応答を受信しました。"
+                            if content else "応答はありましたが、本文が空でした。"))
+        _status.update(online=True, note="ready")
+    except Exception as exc:  # pragma: no cover - depends on local endpoint
+        elapsed = int((time.perf_counter() - start) * 1000)
+        note = f"テスト呼び出しに失敗しました: {exc}"
+        result.update(ok=False, online=False, elapsed_ms=elapsed, note=note)
+        _status.update(online=False, note=note)
+    result["status"] = status()
+    return result
 
 
 def get_manager():
@@ -812,6 +1074,12 @@ def _set_setup(**kw: Any) -> None:
 def ensure_model_async() -> dict[str, Any]:
     """Kick off (once) the first-launch download/load in a background thread."""
     global _setup_thread
+    if eff_ai_provider() != "foundry":
+        provider = eff_ai_provider()
+        _set_setup(state="ready", progress=100, phase="external",
+                   model=eff_chat_model(),
+                   message=f"{_provider_label(provider)} のモデルは接続先側で管理します。")
+        return setup_state()
     with _setup_lock:
         if _setup["state"] in ("checking", "preparing", "downloading", "loading"):
             return dict(_setup)
@@ -826,6 +1094,12 @@ def ensure_model_async() -> dict[str, Any]:
 
 def _run_setup() -> None:
     """Download accelerators (EPs/DLLs) and the chat model, with progress."""
+    if eff_ai_provider() != "foundry":
+        provider = eff_ai_provider()
+        _set_setup(state="ready", progress=100, phase="external",
+                   model=eff_chat_model(),
+                   message=f"{_provider_label(provider)} のモデルは接続先側で管理します。")
+        return
     try:
         from foundry_local_sdk import Configuration, FoundryLocalManager  # type: ignore  # noqa
     except Exception:
@@ -958,6 +1232,9 @@ def list_models() -> dict[str, Any]:
      "models": [{"id","alias","task","kind","cached","loaded",
                  "selected_kinds","active_kinds"}]}
     """
+    provider = eff_ai_provider()
+    if provider != "foundry":
+        init()
     selected = {
         "chat": eff_chat_model(),
         "translate": eff_translate_model(),
@@ -973,11 +1250,15 @@ def list_models() -> dict[str, Any]:
     }
     status_snapshot = _base_status()
     status_snapshot["speech"] = speech
+    if provider != "foundry":
+        return _list_openai_models(provider, selected, current, status_snapshot)
+
     mgr, err = _sdk_manager(initialize=True)
     if mgr is None:
         return {"online": False,
                 "note": "Foundry Local SDK が利用できないため、モデル一覧を取得できません。",
-                "detail": err or "", "selected": selected, "current": current,
+                "detail": err or "", "provider": provider, "manageable": True,
+                "selected": selected, "current": current,
                 "status": status_snapshot, "models": []}
 
     loaded_ids: set[str] = set()
@@ -1019,8 +1300,60 @@ def list_models() -> dict[str, Any]:
                 "status": status_snapshot, "models": []}
 
     models.sort(key=lambda x: (x["kind"] != "chat", not x["cached"], x["id"]))
-    return {"online": True, "note": "", "selected": selected,
+    return {"online": True, "note": "", "provider": provider, "manageable": True,
+            "selected": selected,
             "current": current, "status": status_snapshot, "models": models}
+
+
+def _list_openai_models(provider: str, selected: dict[str, str],
+                        current: dict[str, str],
+                        status_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """List models from an external OpenAI-compatible endpoint such as Ollama."""
+    base = eff_ai_base_url()
+    common = {
+        "provider": provider,
+        "manageable": False,
+        "selected": selected,
+        "current": current,
+        "status": status_snapshot,
+        "models": [],
+    }
+    if not base:
+        return {**common, "online": False,
+                "note": f"{_provider_label(provider)} の接続先URLを設定してください。"}
+    try:
+        from openai import OpenAI
+        client = OpenAI(base_url=_normalize(base), api_key=eff_ai_api_key(),
+                        timeout=config.AI_TIMEOUT, max_retries=0)
+        models_resp = client.models.list()
+        ids = [m.id for m in getattr(models_resp, "data", []) if getattr(m, "id", "")]
+    except Exception as exc:
+        return {**common, "online": False,
+                "note": f"{_provider_label(provider)} のモデル一覧を取得できません: {exc}"}
+
+    models = []
+    for mid in ids:
+        kind = _model_kind(mid)
+        selected_kinds = [
+            k for k, ref in selected.items()
+            if ref and _external_model_ref_matches(ref, mid)
+        ]
+        active_kinds = [
+            k for k, ref in current.items()
+            if ref and _external_model_ref_matches(ref, mid)
+        ]
+        models.append({
+            "id": mid,
+            "alias": mid,
+            "task": "chat-completion",
+            "kind": kind,
+            "cached": True,
+            "loaded": bool(active_kinds),
+            "selected_kinds": selected_kinds,
+            "active_kinds": active_kinds,
+        })
+    models.sort(key=lambda x: (x["kind"] != "chat", x["id"]))
+    return {**common, "online": True, "note": "", "models": models}
 
 
 def download_model_async(alias: str, *, kind: str = "chat") -> dict[str, Any]:
@@ -1031,6 +1364,8 @@ def download_model_async(alias: str, *, kind: str = "chat") -> dict[str, Any]:
     when they already match the configured model preference.
     """
     global _setup_thread
+    if eff_ai_provider() != "foundry":
+        raise ValueError("現在のAIプロバイダーでは、モデルは接続先側で管理してください。")
     alias = (alias or "").strip()
     if not alias:
         raise ValueError("model alias is required")
@@ -1147,16 +1482,94 @@ def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,
     # models reject response_format. Either way callers tolerate plain text.
     attempts = ([{**base, "response_format": {"type": "json_object"}}] if json_mode else []) + [base]
     last = None
+    reloaded = False
     for kw in attempts:
         try:
             resp = _client.chat.completions.create(**kw)
             return resp.choices[0].message.content
         except Exception as exc:  # pragma: no cover
             last = exc
+            # Load a cached-but-not-loaded Foundry model once, then retry.
+            if (not reloaded and eff_ai_provider() == "foundry"
+                    and _is_not_loaded_error(exc) and _ensure_loaded(kw.get("model"))):
+                reloaded = True
+                try:
+                    resp = _client.chat.completions.create(**kw)
+                    return resp.choices[0].message.content
+                except Exception as exc2:
+                    last = exc2
             continue
     _status["online"] = False
     _status["note"] = f"call failed: {last}"
     return None
+
+
+def _chat_stream(messages: list[dict[str, str]], *, temperature: float = 0.4,
+                 max_tokens: int = 512, json_mode: bool = False,
+                 model: str | None = None):
+    """Yield streamed text chunks from an OpenAI-compatible chat endpoint."""
+    if _client is None:
+        init()
+    if _client is None:
+        raise RuntimeError(_status.get("note") or "AI offline")
+    base: dict[str, Any] = dict(model=(model or _model), messages=messages,
+                                temperature=temperature, max_tokens=max_tokens,
+                                stream=True)
+    attempts = ([{**base, "response_format": {"type": "json_object"}}] if json_mode else []) + [base]
+    last = None
+    reloaded = False
+    for kw in attempts:
+        try:
+            try:
+                stream = _client.chat.completions.create(**kw)
+            except Exception as exc:
+                if (not reloaded and eff_ai_provider() == "foundry"
+                        and _is_not_loaded_error(exc) and _ensure_loaded(kw.get("model"))):
+                    reloaded = True
+                    stream = _client.chat.completions.create(**kw)
+                else:
+                    raise
+            for chunk in stream:
+                try:
+                    delta = chunk.choices[0].delta.content or ""
+                except Exception:
+                    delta = ""
+                if delta:
+                    yield delta
+            return
+        except Exception as exc:  # pragma: no cover
+            last = exc
+            continue
+    _status["online"] = False
+    _status["note"] = f"stream failed: {last}"
+    raise RuntimeError(str(last))
+
+
+def _stream_event(event: str, **data: Any) -> str:
+    return json.dumps({"event": event, **data}, ensure_ascii=False) + "\n"
+
+
+def _stream_completion(messages: list[dict[str, str]], *,
+                       temperature: float = 0.4, max_tokens: int = 512,
+                       json_mode: bool = False, model: str | None = None,
+                       finish=None, fallback=None):
+    """NDJSON events: start, delta, final. Final keeps existing API shape."""
+    yield _stream_event("start", status=status())
+    raw_parts: list[str] = []
+    try:
+        for delta in _chat_stream(messages, temperature=temperature,
+                                  max_tokens=max_tokens, json_mode=json_mode,
+                                  model=model):
+            raw_parts.append(delta)
+            yield _stream_event("delta", text=delta)
+        raw = "".join(raw_parts)
+        result = finish(raw) if finish else {"online": True, "text": raw}
+    except Exception as exc:
+        yield _stream_event("error", note=f"ストリーミングに失敗しました: {exc}")
+        result = None
+    if not result and fallback:
+        result = fallback()
+    yield _stream_event("final", result=result or {"online": False, "note": "AI出力を取得できませんでした。"})
 
 
 # --- Public helpers --------------------------------------------------------
@@ -1177,15 +1590,19 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
 
     if mode == "word":
         instruction = (
-            "あなたは日本人英語学習者向けの辞書です。次の英単語の意味を答えてください。"
-            "JSONで {\"translation\": \"日本語の意味(簡潔に)\", \"pos\": \"品詞\", "
-            "\"note\": \"使い方の一言メモ(任意)\"} の形式のみ返してください。"
+            "You are a dictionary for Japanese learners of English. "
+            "Give the meaning of the following English word IN JAPANESE. "
+            "Return ONLY JSON in the form "
+            "{\"translation\": \"concise Japanese meaning\", \"pos\": \"part of speech in Japanese\", "
+            "\"note\": \"optional one-line usage note in Japanese\"}."
         )
     else:
         instruction = (
-            "あなたは日本人英語学習者向けの翻訳者です。次の英文を自然な日本語に訳してください。"
-            "JSONで {\"translation\": \"自然な和訳\", \"note\": \"文法やニュアンスの一言メモ(任意)\"} "
-            "の形式のみ返してください。"
+            "You are a translator for Japanese learners of English. "
+            "Translate the following English text into natural Japanese. "
+            "Return ONLY JSON in the form "
+            "{\"translation\": \"natural Japanese translation\", "
+            "\"note\": \"optional one-line note on grammar or nuance in Japanese\"}."
         )
 
     raw = _chat(
@@ -1216,6 +1633,50 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
     return {"source": text, "translation": "(AIオフライン: 訳を取得できませんでした)",
             "note": "Foundry Local を起動すると和訳が利用できます。",
             "online": False, "offline_fallback": True}
+
+
+def translate_stream(text: str, mode: str = "auto", glossary: dict | None = None):
+    text = (text or "").strip()
+    if mode == "auto":
+        mode = "word" if len(text.split()) == 1 else "sentence"
+    if mode == "word":
+        instruction = (
+            "You are a dictionary for Japanese learners of English. "
+            "Give the meaning of the following English word IN JAPANESE. "
+            "Return ONLY JSON in the form "
+            "{\"translation\": \"concise Japanese meaning\", \"pos\": \"part of speech in Japanese\", "
+            "\"note\": \"optional one-line usage note in Japanese\"}."
+        )
+    else:
+        instruction = (
+            "You are a translator for Japanese learners of English. "
+            "Translate the following English text into natural Japanese. "
+            "Return ONLY JSON in the form "
+            "{\"translation\": \"natural Japanese translation\", "
+            "\"note\": \"optional one-line note on grammar or nuance in Japanese\"}."
+        )
+
+    def finish(raw: str) -> dict[str, Any] | None:
+        parsed = _safe_json(raw)
+        if parsed and parsed.get("translation"):
+            if mode != "word" and _looks_untranslated(text, str(parsed.get("translation", ""))):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
+            parsed.setdefault("note", "")
+            return {"source": text, "online": True, **parsed}
+        cleaned = _plain_text(raw)
+        if cleaned:
+            if mode != "word" and _looks_untranslated(text, cleaned):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
+            return {"source": text, "translation": cleaned, "note": "", "online": True}
+        return None
+
+    return _stream_completion(
+        [{"role": "system", "content": instruction},
+         {"role": "user", "content": text}],
+        temperature=0.2, max_tokens=300, json_mode=True,
+        model=(_translate_model or config.TRANSLATE_MODEL or None),
+        finish=finish, fallback=lambda: translate(text, mode, glossary),
+    )
 
 
 def _translation_failed(source: str, note: str) -> dict[str, Any]:
@@ -1265,6 +1726,39 @@ def _is_mostly_japanese(s: str) -> bool:
     return jp >= latin
 
 
+# --- Learner level → concrete difficulty guidance --------------------------
+# The settings UI lets the learner pick a level (入門/初級/中級). Passing the
+# bare alias ("beginner"/"elementary"/"intermediate") to the model gives weak,
+# inconsistent results — small local models can't infer the intended vocabulary
+# or sentence complexity from one word. These guides spell out the target so the
+# difference between levels is actually reflected in chat, corrections, reading,
+# and story generation.
+
+_LEVEL_GUIDES = {
+    "beginner": (
+        "CEFR A1 (absolute beginner / 入門). Use only the ~500 most common words. "
+        "Mostly present tense, sentences under 8 words, one idea per sentence. "
+        "Avoid idioms, phrasal verbs, and subordinate clauses."
+    ),
+    "elementary": (
+        "CEFR A2 (elementary / 初級). Use common everyday vocabulary. "
+        "Simple past, future, and present continuous are fine. Sentences under "
+        "12 words; at most one simple subordinate clause. Avoid rare idioms."
+    ),
+    "intermediate": (
+        "CEFR B1 (intermediate / 中級). Use varied everyday and topic vocabulary, "
+        "common phrasal verbs and connectors, and a natural mix of tenses and "
+        "compound/complex sentences. Keep it clear, not academic."
+    ),
+}
+
+
+def _level_guide(level: str) -> str:
+    """Return concrete difficulty guidance for a learner level alias."""
+    key = (level or "").strip().lower()
+    return _LEVEL_GUIDES.get(key, _LEVEL_GUIDES["beginner"])
+
+
 def tutor_reply(history: list[dict[str, str]], scenario: str = "",
                 level: str = "beginner", name: str = "Vivi",
                 gender: str = "female") -> dict[str, Any]:
@@ -1273,7 +1767,8 @@ def tutor_reply(history: list[dict[str, str]], scenario: str = "",
     sys = (
         f"You are '{name}', a warm, encouraging {g} English conversation partner for a "
         f"Japanese {level} learner. Stay strictly in the role-play scenario: {scenario or 'free talk'}. "
-        "Rules: (1) Reply in short, natural English suited to the learner's level. "
+        f"Target English level — {_level_guide(level)} "
+        "Rules: (1) Reply in short, natural English that matches the target level above. "
         "(2) Always provide reply_ja, a natural Japanese translation of your English reply. "
         "(3) Check the learner's latest English carefully for spelling, word choice, grammar, "
         "missing words, unnatural phrasing, or Japanese-English literal wording. If there is any "
@@ -1281,8 +1776,10 @@ def tutor_reply(history: list[dict[str, str]], scenario: str = "",
         "If it is fully natural, set correction to an empty string. "
         "(4) Always include one short, practical Japanese tip in tip. "
         "(5) Always end the English reply with a simple follow-up question to keep the conversation going. "
-        "Return ONLY JSON: {\"reply\":\"English reply\", \"reply_ja\":\"返信の和訳\", "
-        "\"correction\":\"訂正や改善点(無ければ空文字)\", \"tip\":\"短い学習ヒント\"}."
+        "Return ONLY JSON: {\"reply\":\"English reply\", "
+        "\"reply_ja\":\"Japanese translation of the reply\", "
+        "\"correction\":\"correction or improvement point in Japanese (empty string if none)\", "
+        "\"tip\":\"short learning tip in Japanese\"}."
     )
     messages = [{"role": "system", "content": sys}] + history
     raw = _chat(messages, temperature=0.6, max_tokens=400, json_mode=True)
@@ -1313,6 +1810,56 @@ def tutor_reply(history: list[dict[str, str]], scenario: str = "",
     }
 
 
+def tutor_reply_stream(history: list[dict[str, str]], scenario: str = "",
+                       level: str = "beginner", name: str = "Vivi",
+                       gender: str = "female"):
+    g = "male" if str(gender).lower().startswith("m") else "female"
+    sys = (
+        f"You are '{name}', a warm, encouraging {g} English conversation partner for a "
+        f"Japanese {level} learner. Stay strictly in the role-play scenario: {scenario or 'free talk'}. "
+        f"Target English level — {_level_guide(level)} "
+        "Rules: (1) Reply in short, natural English that matches the target level above. "
+        "(2) Always provide reply_ja, a natural Japanese translation of your English reply. "
+        "(3) Check the learner's latest English carefully for spelling, word choice, grammar, "
+        "missing words, unnatural phrasing, or Japanese-English literal wording. If there is any "
+        "issue, put a concise Japanese explanation in correction, including the better phrase. "
+        "If it is fully natural, set correction to an empty string. "
+        "(4) Always include one short, practical Japanese tip in tip. "
+        "(5) Always end the English reply with a simple follow-up question to keep the conversation going. "
+        "Return ONLY JSON: {\"reply\":\"English reply\", "
+        "\"reply_ja\":\"Japanese translation of the reply\", "
+        "\"correction\":\"correction or improvement point in Japanese (empty string if none)\", "
+        "\"tip\":\"short learning tip in Japanese\"}."
+    )
+    messages = [{"role": "system", "content": sys}] + history
+    learner_text = _last_user_text(history)
+
+    def finish(raw: str) -> dict[str, Any] | None:
+        parsed = _safe_json(raw)
+        if parsed and parsed.get("reply"):
+            for k in ("reply_ja", "correction", "tip"):
+                parsed.setdefault(k, "")
+            parsed["reply_ja"] = _ensure_reply_ja(parsed["reply"], parsed.get("reply_ja", ""))
+            review = _review_learner_text(learner_text, level)
+            if review.get("correction") and not parsed.get("correction"):
+                parsed["correction"] = review["correction"]
+            if review.get("tip") and not parsed.get("tip"):
+                parsed["tip"] = review["tip"]
+            return {"online": True, **parsed}
+        cleaned = _plain_text(raw)
+        if cleaned:
+            review = _review_learner_text(learner_text, level)
+            return {"online": True, "reply": cleaned, "reply_ja": _ensure_reply_ja(cleaned, ""),
+                    "correction": review.get("correction", ""), "tip": review.get("tip", "")}
+        return None
+
+    return _stream_completion(
+        messages, temperature=0.6, max_tokens=400, json_mode=True,
+        finish=finish,
+        fallback=lambda: tutor_reply(history, scenario, level, name=name, gender=gender),
+    )
+
+
 def _last_user_text(history: list[dict[str, str]]) -> str:
     for msg in reversed(history or []):
         if msg.get("role") == "user":
@@ -1341,10 +1888,12 @@ def _review_learner_text(text: str, level: str = "beginner") -> dict[str, str]:
     local = _local_chat_feedback(text)
     sys = (
         "You are an English writing coach for a Japanese learner. Review ONLY the learner's latest message. "
+        f"The learner's target level — {_level_guide(level)} "
         "Find spelling mistakes, wrong word choice, grammar mistakes, missing articles/prepositions, or unnatural phrasing. "
-        "If there is any issue, give one concise Japanese correction with a better English phrase. "
+        "If there is any issue, give one concise Japanese correction with a better English phrase suited to that level. "
         "If the sentence is natural and correct, set correction to an empty string. "
-        "Return ONLY JSON: {\"correction\":\"日本語の訂正説明。Better: ...\", \"tip\":\"短い日本語ヒント\"}."
+        "Return ONLY JSON: {\"correction\":\"correction explanation in Japanese. Better: ...\", "
+        "\"tip\":\"short tip in Japanese\"}."
     )
     raw = _chat(
         [{"role": "system", "content": sys},
@@ -1398,10 +1947,11 @@ def chat_suggestions(history: list[dict[str, str]], scenario: str = "",
     sys = (
         "You help a Japanese English learner continue a role-play conversation. "
         f"Scenario: {scenario or 'free talk'}. Learner level: {level}. "
+        f"Target English level — {_level_guide(level)} "
         "Create 3 short, natural English replies the learner can choose from. "
         "Keep them easy to say aloud and relevant to the latest assistant message. "
         "Return ONLY JSON: {\"suggestions\":[{\"en\":\"English sentence\","
-        "\"ja\":\"自然な日本語訳\",\"note\":\"短い使いどころ\"}]}."
+        "\"ja\":\"natural Japanese translation\",\"note\":\"short note in Japanese on when to use it\"}]}."
     )
     raw = _chat(
         [{"role": "system", "content": sys}] + history[-10:],
@@ -1429,6 +1979,42 @@ def chat_suggestions(history: list[dict[str, str]], scenario: str = "",
             {"en": "I think so, but I'm not sure.", "ja": "そう思いますが、確信はありません。", "note": "やわらかく意見を言うとき"},
         ],
     }
+
+
+def chat_suggestions_stream(history: list[dict[str, str]], scenario: str = "",
+                            level: str = "beginner"):
+    sys = (
+        "You help a Japanese English learner continue a role-play conversation. "
+        f"Scenario: {scenario or 'free talk'}. Learner level: {level}. "
+        f"Target English level — {_level_guide(level)} "
+        "Create 3 short, natural English replies the learner can choose from. "
+        "Keep them easy to say aloud and relevant to the latest assistant message. "
+        "Return ONLY JSON: {\"suggestions\":[{\"en\":\"English sentence\","
+        "\"ja\":\"natural Japanese translation\",\"note\":\"short note in Japanese on when to use it\"}]}."
+    )
+
+    def finish(raw: str) -> dict[str, Any] | None:
+        parsed = _safe_json(raw)
+        items = parsed.get("suggestions") if parsed else None
+        if isinstance(items, list):
+            clean = []
+            for item in items[:3]:
+                if isinstance(item, dict) and item.get("en"):
+                    clean.append({
+                        "en": str(item.get("en", "")).strip(),
+                        "ja": str(item.get("ja", "")).strip(),
+                        "note": str(item.get("note", "")).strip(),
+                    })
+            if clean:
+                return {"online": True, "suggestions": clean}
+        return None
+
+    return _stream_completion(
+        [{"role": "system", "content": sys}] + history[-10:],
+        temperature=0.5, max_tokens=420, json_mode=True,
+        finish=finish,
+        fallback=lambda: chat_suggestions(history, scenario, level),
+    )
 
 
 # --- Reading passage generation -------------------------------------------
@@ -1503,6 +2089,7 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
         "You are an English reading-material writer for Japanese learners. "
         f"Write EXACTLY {para_count} paragraphs ({plan['words']}) for a {level} learner "
         f"about \"{topic_txt}\" as {angle['genre']}. "
+        f"Target English level — {_level_guide(level)} "
         f"Required paragraph roles: {plan['roles']} "
         f"Use this unique angle: {angle['angle']}. "
         f"Use this paragraph structure: {angle['structure']}. "
@@ -1552,6 +2139,69 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
     sample = _fallback_reading_passage(fallback_topic, length=length)
     return {"online": False, **sample,
             "note": "AIオフラインのため、構造が見えやすいサンプル英文を表示しています。"}
+
+
+def generate_reading_passage_stream(topic: str = "", level: str = "beginner",
+                                    length: str = "medium"):
+    topic_txt = re.sub(r"\s+", " ", str(topic or "")).strip() or "technology and daily life"
+    plan = _READING_LENGTHS.get(length, _READING_LENGTHS["medium"])
+    para_count = int(plan["paragraphs"])
+    angle = random.choice(_READING_ANGLES)
+    seed = random.randint(1000, 9999)
+    sys = (
+        "You are an English reading-material writer for Japanese learners. "
+        f"Write EXACTLY {para_count} paragraphs ({plan['words']}) for a {level} learner "
+        f"about \"{topic_txt}\" as {angle['genre']}. "
+        f"Target English level — {_level_guide(level)} "
+        f"Required paragraph roles: {plan['roles']} "
+        f"Use this unique angle: {angle['angle']}. "
+        f"Use this paragraph structure: {angle['structure']}. "
+        f"Variation seed: {seed}. Do not reuse stock examples about phones, studying desks, "
+        "or generic daily habits unless the topic explicitly asks for them. "
+        "Include varied sentence patterns (SV, SVC, SVO, SVOO, SVOC), connectors, "
+        "pronouns, reasons, causes, results, and demonstratives. "
+        "Make the situation, examples, nouns, and conclusion meaningfully different each time. "
+        "The passage must be ENGLISH ONLY. Return ONLY JSON: "
+        "{\"title\":\"short English title\", \"passage\":\"English passage\", "
+        "\"passage_paragraphs\":[\"paragraph 1\", \"paragraph 2\"], "
+        "\"passage_ja\":\"natural Japanese translation of the whole passage\"}."
+        f" The passage_paragraphs array MUST contain exactly {para_count} English strings. "
+        "Separate paragraphs in passage with a blank line."
+    )
+    user = (
+        f"Topic: {topic_txt}\nLevel: {level}\nLength: {length}\n"
+        f"Genre: {angle['genre']}\nAngle: {angle['angle']}\n"
+        f"Structure: {angle['structure']}\nSeed: {seed}"
+    )
+
+    def finish(raw: str) -> dict[str, Any] | None:
+        parsed = _safe_json(raw)
+        if parsed and (parsed.get("passage") or parsed.get("passage_paragraphs")):
+            para_items = parsed.get("passage_paragraphs")
+            passage = _reading_paragraphs_to_text(para_items) if isinstance(para_items, list) else ""
+            if not passage:
+                passage = _plain_text(str(parsed.get("passage", "")))
+            passage = _ensure_reading_paragraphs(passage, para_count)
+            passage_ja = str(parsed.get("passage_ja", "")).strip()
+            if passage and not _JP_CHARS.search(passage):
+                if not passage_ja or _looks_untranslated(passage, passage_ja):
+                    passage_ja = _ensure_reply_ja(passage, "")
+                return {"online": True,
+                        "title": str(parsed.get("title", "")).strip(),
+                        "passage": passage, "passage_ja": passage_ja, "note": ""}
+        cleaned = _plain_text(raw)
+        if cleaned and not _JP_CHARS.search(cleaned):
+            cleaned = _ensure_reading_paragraphs(cleaned, para_count)
+            return {"online": True, "title": topic_txt.title(), "passage": cleaned,
+                    "passage_ja": _ensure_reply_ja(cleaned, ""), "note": ""}
+        return None
+
+    return _stream_completion(
+        [{"role": "system", "content": sys}, {"role": "user", "content": user}],
+        temperature=0.85, max_tokens=1200, json_mode=True,
+        finish=finish,
+        fallback=lambda: generate_reading_passage(topic, level=level, length=length),
+    )
 
 
 def _reading_paragraphs_to_text(value: list[Any]) -> str:
@@ -1616,6 +2266,425 @@ def _fallback_reading_passage(topic: str, length: str = "long") -> dict[str, str
     return {"title": title, "passage": passage, "passage_ja": passage_ja}
 
 
+# --- Reading analysis (sentence-by-sentence) -------------------------------
+# Small local models break down when asked to emit one giant JSON object for a
+# whole passage: the output is truncated or malformed once the text is long.
+# So we split the passage into paragraphs/sentences ourselves and ask the model
+# to analyse ONE sentence per call, returning a tiny JSON object. Any sentence
+# the model fails on falls back to the rule-based analyser individually, so a
+# single bad sentence never wrecks the whole passage.
+
+def _reading_sentence_sys(level: str) -> str:
+    return (
+        "You are an expert English reading coach for Japanese learners. "
+        f"Analyse ONE English sentence for a {level} learner. "
+        f"Pitch the explanation to this level — {_level_guide(level)} "
+        "Do NOT translate it. Return ONLY a compact JSON object for this single sentence. "
+        "Use concrete values, never placeholder descriptions. "
+        "Forbidden values include: 'exact original sentence', 'exact words from the sentence', "
+        "'SV/SVC/SVO/SVOO/SVOC + Japanese explanation', '要点/対比/理由・原因/結果/結論/具体例/詳細など', "
+        "'接続語/S 主語/V 動詞/O 目的語/C 補語/修飾句', '日本語ラベル', and '...'. "
+        "JSON contract: {text, pattern, focus, chunks, signals}. "
+        "Each chunk has kind, label, and text. kind must be one of connector, subject, verb, object, complement, modifier. "
+        "Each signal has key, label, and match. "
+        "Example for 'However, the change does not help everyone in the same way.': "
+        "{\"text\":\"However, the change does not help everyone in the same way.\","
+        "\"pattern\":\"SVO（主語＋動詞＋目的語）\","
+        "\"focus\":\"対比\","
+        "\"chunks\":["
+        "{\"kind\":\"connector\",\"label\":\"接続語\",\"text\":\"However\"},"
+        "{\"kind\":\"subject\",\"label\":\"S 主語\",\"text\":\"the change\"},"
+        "{\"kind\":\"verb\",\"label\":\"V 動詞\",\"text\":\"does not help\"},"
+        "{\"kind\":\"object\",\"label\":\"O 目的語\",\"text\":\"everyone\"},"
+        "{\"kind\":\"modifier\",\"label\":\"修飾句\",\"text\":\"in the same way\"}],"
+        "\"signals\":[{\"key\":\"contrast\",\"label\":\"対比\",\"match\":\"However\"}]}. "
+        "Rules: copy the sentence exactly into text, in English. "
+        "Chunk text and signal match must be copied exactly from the sentence, without adding words. "
+        "Separate sentence-opening connectors such as However/Therefore/For example from the subject. "
+        "Treat verb phrases such as 'does not help', 'can be seen', and 'has been changing' as one V chunk. "
+        "Put prepositional/adverbial phrases such as 'in the same way' in modifier chunks."
+    )
+
+
+def _reading_paragraph_units(text: str) -> list[list[str]]:
+    """Split a passage into paragraphs, each a list of sentence strings."""
+    units = []
+    for para_text in [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]:
+        sentences = _reading_sentence_split(para_text)
+        if sentences:
+            units.append(sentences)
+    if not units:
+        sentences = _reading_sentence_split(text)
+        if sentences:
+            units.append(sentences)
+    return units
+
+
+def _reading_note(any_usable: bool, any_fallback: bool) -> str:
+    if any_usable and any_fallback:
+        return "一部の文はAI解析が崩れたため簡易解析で補いました。"
+    if any_usable:
+        return "AI解析を表示しています。"
+    # AI was reachable but produced nothing usable for any sentence.
+    return "AI解析の形式が崩れたため、簡易解析を表示しています。"
+
+
+def _reading_role(pi: int, total: int) -> str:
+    if total <= 1:
+        return "導入・話題提示"
+    if pi == 0:
+        return "導入・話題提示"
+    if pi == total - 1:
+        return "結論・まとめ"
+    return "展開・補足"
+
+
+def _analyze_reading_sentence(sentence: str, level: str, pi: int, si: int) -> tuple[dict[str, Any], bool, bool]:
+    """Analyse a single sentence via the model, falling back to rules.
+
+    Returns ``(sentence_analysis, usable, responded)`` where ``usable`` is True
+    only when the model produced a valid result for this sentence, and
+    ``responded`` is True whenever the model replied at all (i.e. the AI is
+    reachable, even if its output was unusable). Keeping the two apart lets the
+    caller tell "could not connect" from "connected but output was malformed".
+    """
+    raw = _chat(
+        [{"role": "system", "content": _reading_sentence_sys(level)},
+         {"role": "user", "content": sentence}],
+        temperature=0.1, max_tokens=600, json_mode=True,
+        model=(_translate_model or config.TRANSLATE_MODEL or None),
+    )
+    responded = bool(raw)
+    if raw:
+        parsed = _safe_json(raw)
+        if parsed:
+            item = _clean_reading_sentence(parsed, sentence)
+            if item:
+                return item, True, True
+    return _fallback_sentence_analysis(sentence, pi, si), False, responded
+
+
+def analyze_reading_text(text: str, level: str = "beginner") -> dict[str, Any]:
+    """Analyse a passage into paragraph roles, sentence patterns, and chunks.
+
+    Each sentence is analysed in its own small model call so that long passages
+    do not overwhelm small local models.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return {"online": False, "analysis": None, "note": "解析する英文を入力してください。"}
+
+    units = _reading_paragraph_units(text)
+    if not units:
+        return {"online": False, "analysis": None, "note": "解析する英文を入力してください。"}
+
+    paragraphs = []
+    all_signals = []
+    any_usable = False
+    any_fallback = False
+    any_responded = False
+    total = len(units)
+    for pi, sentences in enumerate(units):
+        items = []
+        for si, sentence in enumerate(sentences):
+            item, usable, responded = _analyze_reading_sentence(sentence, level, pi, si)
+            any_usable = any_usable or usable
+            any_fallback = any_fallback or (not usable)
+            any_responded = any_responded or responded
+            all_signals.extend(item["signals"])
+            items.append(item)
+        paragraphs.append({
+            "index": pi,
+            "role": _reading_role(pi, total),
+            "reason": "段落の位置から役割を推定しました。",
+            "sentences": items,
+        })
+
+    # The AI was never reachable for any sentence -> truly offline.
+    if not any_responded:
+        fallback = _fallback_reading_analysis(
+            text, "AI解析に接続できなかったため、簡易解析を表示しています。")
+        return {"online": False, "analysis": fallback, "note": fallback["note"]}
+
+    note = _reading_note(any_usable, any_fallback)
+    analysis = {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+    return {"online": True, "analysis": analysis, "note": note}
+
+
+def analyze_reading_text_stream(text: str, level: str = "beginner"):
+    """Stream a sentence-by-sentence reading analysis as NDJSON events.
+
+    Emits a ``delta`` per analysed sentence (so the UI shows progress) and a
+    single ``final`` event with the assembled analysis, matching the existing
+    stream contract.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return iter([_stream_event("final", result={"online": False, "analysis": None,
+                                                    "note": "解析する英文を入力してください。"})])
+
+    def gen():
+        yield _stream_event("start", status=status())
+        units = _reading_paragraph_units(text)
+        total_sentences = sum(len(s) for s in units)
+        paragraphs = []
+        all_signals = []
+        any_usable = False
+        any_fallback = False
+        any_responded = False
+        total = len(units)
+        done = 0
+        for pi, sentences in enumerate(units):
+            items = []
+            for si, sentence in enumerate(sentences):
+                try:
+                    item, usable, responded = _analyze_reading_sentence(sentence, level, pi, si)
+                except Exception as exc:
+                    yield _stream_event("error", note=f"文の解析に失敗しました: {exc}")
+                    item, usable, responded = _fallback_sentence_analysis(sentence, pi, si), False, False
+                any_usable = any_usable or usable
+                any_fallback = any_fallback or (not usable)
+                any_responded = any_responded or responded
+                all_signals.extend(item["signals"])
+                items.append(item)
+                done += 1
+                yield _stream_event("delta",
+                                    text=f"[{done}/{total_sentences}] {item['text']}\n")
+            paragraphs.append({
+                "index": pi,
+                "role": _reading_role(pi, total),
+                "reason": "段落の位置から役割を推定しました。",
+                "sentences": items,
+            })
+
+        # The AI was never reachable for any sentence -> truly offline.
+        if not any_responded:
+            fallback = _fallback_reading_analysis(
+                text, "AI解析に接続できなかったため、簡易解析を表示しています。")
+            yield _stream_event("final", result={"online": False, "analysis": fallback,
+                                                  "note": fallback["note"]})
+            return
+        note = _reading_note(any_usable, any_fallback)
+        analysis = {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+        yield _stream_event("final", result={"online": True, "analysis": analysis, "note": note})
+
+    return gen()
+
+
+def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
+    """Validate and normalise one AI-produced sentence object.
+
+    ``source`` is the English text the sentence (and its chunks) must be copied
+    from — the whole passage for batch parsing, or the single sentence itself
+    when each sentence is analysed on its own.
+    """
+    if not isinstance(sent, dict):
+        return None
+    stext = _norm_text(str(sent.get("text", "")))
+    if (not stext or _bad_reading_value(stext) or _JP_CHARS.search(stext)
+            or not _copied_from(stext, source)):
+        return None
+    chunks = []
+    for ch in sent.get("chunks") or []:
+        if not isinstance(ch, dict):
+            continue
+        ctext = _norm_text(str(ch.get("text", "")))
+        if (not ctext or _bad_reading_value(ctext) or _JP_CHARS.search(ctext)
+                or not _copied_from(ctext, stext)):
+            continue
+        kind = str(ch.get("kind", "")).strip().lower()
+        if kind not in {"connector", "subject", "verb", "object", "complement", "modifier"}:
+            kind = "modifier"
+        chunks.append({
+            "kind": kind,
+            "label": str(ch.get("label", "")).strip() or _chunk_label(kind),
+            "text": ctext,
+        })
+    pattern = str(sent.get("pattern", "")).strip()
+    if _bad_reading_value(pattern):
+        pattern = "文型不明"
+    focus = str(sent.get("focus", "")).strip()
+    if _bad_reading_value(focus):
+        focus = "詳細"
+    signals = _clean_reading_signals(sent.get("signals") or [], context=stext)
+    return {
+        "text": stext,
+        "pattern": pattern or "文型不明",
+        "focus": focus or "詳細",
+        "chunks": chunks,
+        "signals": signals,
+    }
+
+
+def _clean_reading_signals(items: list[Any], context: str = "") -> list[dict[str, str]]:
+    clean = []
+    allowed = {"contrast", "reason", "cause", "result", "conclusion",
+               "example", "addition", "sequence", "reference"}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        match = _norm_text(str(item.get("match", "")))
+        if (not match or _bad_reading_value(match) or _JP_CHARS.search(match)
+                or (context and not _copied_from(match, context))):
+            continue
+        key = str(item.get("key", "")).strip().lower()
+        if key not in allowed:
+            key = "reference"
+        clean.append({
+            "key": key,
+            "label": str(item.get("label", "")).strip() or key,
+            "match": match,
+        })
+    return clean
+
+
+_READING_PLACEHOLDERS = {
+    "exact original sentence",
+    "exact words from the sentence",
+    "exact signal word or phrase",
+    "sv/svc/svo/svoo/svoc + japanese explanation",
+    "要点/対比/理由・原因/結果/結論/具体例/詳細など",
+    "接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句",
+    "日本語ラベル",
+    "...",
+}
+
+
+def _bad_reading_value(value: str) -> bool:
+    text = _norm_text(value).lower()
+    if not text:
+        return True
+    return text in _READING_PLACEHOLDERS or "exact " in text or " + japanese explanation" in text
+
+
+def _copied_from(needle: str, haystack: str) -> bool:
+    n = _norm_text(needle).lower().strip(".,;:!?")
+    h = _norm_text(haystack).lower()
+    return bool(n) and n in h
+
+
+def _chunk_label(kind: str) -> str:
+    return {
+        "connector": "接続語",
+        "subject": "S 主語",
+        "verb": "V 動詞",
+        "object": "O 目的語",
+        "complement": "C 補語",
+        "modifier": "修飾句",
+    }.get(kind, "修飾句")
+
+
+def _fallback_reading_analysis(text: str, note: str) -> dict[str, Any]:
+    paragraphs = []
+    all_signals = []
+    for pi, para_text in enumerate([p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]):
+        sentences = []
+        for si, sentence in enumerate(_reading_sentence_split(para_text)):
+            item = _fallback_sentence_analysis(sentence, pi, si)
+            sentences.append(item)
+            all_signals.extend(item["signals"])
+        if sentences:
+            role = "導入・話題提示" if pi == 0 else "展開・補足"
+            paragraphs.append({
+                "index": pi,
+                "role": role,
+                "reason": "AI出力が崩れたため、語順と接続語から推定しました。",
+                "sentences": sentences,
+            })
+    if paragraphs:
+        paragraphs[-1]["role"] = "結論・まとめ" if len(paragraphs) > 1 else paragraphs[-1]["role"]
+    return {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+
+
+def _reading_sentence_split(text: str) -> list[str]:
+    return [s.strip() for s in re.findall(r"[^.!?]+(?:[.!?]+|$)", text) if s.strip()]
+
+
+_FB_CONNECTORS = {
+    "however": ("contrast", "対比"),
+    "therefore": ("result", "結果"),
+    "so": ("result", "結果"),
+    "because": ("reason", "理由"),
+    "although": ("contrast", "対比"),
+    "also": ("addition", "追加"),
+    "moreover": ("addition", "追加"),
+    "finally": ("conclusion", "結論"),
+}
+_FB_VERBS = {
+    "feel", "feels", "felt", "see", "sees", "saw", "seen", "help", "helps",
+    "make", "makes", "made", "think", "thinks", "look", "looks", "read",
+    "reads", "become", "becomes", "became", "give", "gives", "find", "finds",
+    "show", "shows", "need", "needs", "use", "uses", "learn", "learns",
+}
+_FB_AUX = {"do", "does", "did", "can", "could", "will", "would", "should",
+           "may", "might", "must", "is", "are", "was", "were", "am", "be",
+           "has", "have", "had"}
+_FB_NEG = {"not", "never"}
+_FB_PREP = {"in", "on", "at", "by", "for", "from", "with", "without", "into",
+            "over", "under", "between", "through", "during", "before", "after",
+            "of", "to", "about", "around", "when", "where", "while", "because", "if"}
+_FB_LINKING = {"feel", "feels", "felt", "is", "are", "was", "were", "am",
+               "be", "become", "becomes", "became", "seem", "seems"}
+
+
+def _fallback_sentence_analysis(sentence: str, pi: int, si: int) -> dict[str, Any]:
+    words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?|\d+", sentence)
+    lower = [w.lower() for w in words]
+    signals = []
+    chunks = []
+    start = 0
+    if lower and lower[0] in _FB_CONNECTORS:
+        key, label = _FB_CONNECTORS[lower[0]]
+        chunks.append({"kind": "connector", "label": "接続語", "text": words[0]})
+        signals.append({"key": key, "label": label, "match": words[0]})
+        start = 1
+    verb_start, verb_end = _fallback_find_verb(lower, start)
+    if verb_start < 0:
+        return {
+            "text": sentence, "pattern": "文型不明", "focus": "詳細",
+            "chunks": chunks or [{"kind": "modifier", "label": "文", "text": " ".join(words)}],
+            "signals": signals,
+        }
+    subject = " ".join(words[start:verb_start]).strip()
+    verb = " ".join(words[verb_start:verb_end + 1]).strip()
+    rest_words = words[verb_end + 1:]
+    rest_lower = lower[verb_end + 1:]
+    if subject:
+        chunks.append({"kind": "subject", "label": "S 主語", "text": subject})
+    if verb:
+        chunks.append({"kind": "verb", "label": "V 動詞", "text": verb})
+    prep_at = next((i for i, w in enumerate(rest_lower) if w in _FB_PREP), -1)
+    main_rest = rest_words[:prep_at] if prep_at >= 0 else rest_words
+    prep_rest = rest_words[prep_at:] if prep_at >= 0 else []
+    main_kind = "complement" if lower[verb_end] in _FB_LINKING else "object"
+    if main_rest:
+        chunks.append({"kind": main_kind, "label": _chunk_label(main_kind), "text": " ".join(main_rest)})
+    if prep_rest:
+        chunks.append({"kind": "modifier", "label": "修飾句", "text": " ".join(prep_rest)})
+    pattern = "SVC（主語＋動詞＋補語）" if main_kind == "complement" and main_rest else (
+        "SVO（主語＋動詞＋目的語）" if main_rest else "SV（主語＋動詞）"
+    )
+    focus = signals[0]["label"] if signals else ("要点" if si == 0 else "詳細")
+    return {"text": sentence, "pattern": pattern, "focus": focus, "chunks": chunks, "signals": signals}
+
+
+def _fallback_find_verb(lower: list[str], start: int) -> tuple[int, int]:
+    for i in range(start, len(lower)):
+        w = lower[i]
+        if w in _FB_AUX:
+            end = i
+            j = i + 1
+            if j < len(lower) and lower[j] in _FB_NEG:
+                end = j
+                j += 1
+            if j < len(lower) and (lower[j] in _FB_VERBS or re.search(r"(ed|ing)$", lower[j])):
+                end = j
+            return i, end
+        if w in _FB_VERBS or re.search(r"(ed|ing)$", w):
+            return i, i
+    return -1, -1
+
+
 def check_speech(target: str, said: str, level: str = "beginner") -> dict[str, Any]:
     """Compare what the learner said (from transcription) to the target line."""
     target = (target or "").strip()
@@ -1624,11 +2693,12 @@ def check_speech(target: str, said: str, level: str = "beginner") -> dict[str, A
 
     sys = (
         "You are a friendly English pronunciation/accuracy coach for a Japanese "
-        f"{level} learner. Compare the TARGET sentence and what the learner SAID "
+        f"{level} learner. Target English level — {_level_guide(level)} "
+        "Compare the TARGET sentence and what the learner SAID "
         "(auto-transcribed, so ignore punctuation/case). Return ONLY JSON: "
-        "{\"score\":0-100, \"good\":\"褒めポイント(日本語)\", "
-        "\"improve\":\"直すと良い点(日本語, 具体的に)\", "
-        "\"missed_words\":[\"言えていない/違った単語\"]}."
+        "{\"score\":0-100, \"good\":\"praise point in Japanese\", "
+        "\"improve\":\"specific point to improve in Japanese\", "
+        "\"missed_words\":[\"words that were missed or said incorrectly\"]}."
     )
     raw = _chat(
         [{"role": "system", "content": sys},
@@ -1691,7 +2761,8 @@ def _force_english_story(words: list[str], theme: str, level: str,
     for attempt in range(2):
         sys = (
             f"Write {fmt_desc} ({len_desc}) in ENGLISH ONLY for a Japanese {level} "
-            f"English learner, on the theme \"{theme}\". You MUST include every "
+            f"English learner (target level — {_level_guide(level)}), "
+            f"on the theme \"{theme}\". You MUST include every "
             "required term exactly as written at least once. Do not translate, "
             "inflect, replace, or omit any required term. Output ONLY the English "
             "passage as plain text: no Japanese, no labels, no JSON, no quotes."
@@ -1752,8 +2823,8 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
         f"\"{theme_txt}\". You MUST use EVERY required term naturally and "
         f"correctly: {word_list}. Copy each required term exactly as written at "
         "least once in the English story. Do not translate, inflect, replace, or "
-        "omit required terms. Keep the English natural and suited to the "
-        "learner's level, and make the theme clearly recognisable. "
+        "omit required terms. Keep the English natural and matched to the target "
+        f"level ({_level_guide(level)}), and make the theme clearly recognisable. "
         "CRITICAL: the \"story\" field MUST be written in ENGLISH only — never in "
         "Japanese, and not mixed Japanese/English. The \"story_ja\" field is the "
         "Japanese translation of that "
@@ -1815,6 +2886,92 @@ def generate_story(words: list[str], theme: str = "", level: str = "beginner",
             "used_words": words, "vocab_notes": [],
             "note": "AIオフラインのため文章を生成できません。Foundry Local を起動すると、"
                     "指定した単語やフレーズを使ったオリジナルの文章を作れます。"}
+
+
+def generate_story_stream(words: list[str], theme: str = "", level: str = "beginner",
+                          fmt: str = "story", length: str = "short"):
+    seen_words = set()
+    clean_words = []
+    for raw in words or []:
+        word = re.sub(r"\s+", " ", str(raw)).strip()
+        key = word.lower()
+        if word and key not in seen_words:
+            seen_words.add(key)
+            clean_words.append(word)
+    words = clean_words
+    if not words:
+        return iter([_stream_event("final", result={"online": _status["online"], "title": "", "story": "",
+                                                    "story_ja": "", "used_words": [], "vocab_notes": [],
+                                                    "note": "単語やフレーズを1つ以上選んでください。"})])
+
+    fmt_desc = _STORY_FORMATS.get(fmt, _STORY_FORMATS["story"])
+    len_desc = _STORY_LENGTHS.get(length, _STORY_LENGTHS["short"])
+    theme_txt = (theme or "").strip() or "an everyday situation"
+    word_list = ", ".join(words)
+    required_lines = "\n".join(f"- {w}" for w in words)
+    sys = (
+        f"You are an English teacher writing practice material for a Japanese "
+        f"{level} learner. Write {fmt_desc} ({len_desc}) on the theme: "
+        f"\"{theme_txt}\". You MUST use EVERY required term naturally and "
+        f"correctly: {word_list}. Copy each required term exactly as written at "
+        "least once in the English story. Do not translate, inflect, replace, or "
+        "omit required terms. Keep the English natural and matched to the target "
+        f"level ({_level_guide(level)}), and make the theme clearly recognisable. "
+        "CRITICAL: the \"story\" field MUST be written in ENGLISH only — never in "
+        "Japanese, and not mixed Japanese/English. The \"story_ja\" field is the "
+        "Japanese translation of that English passage. Do not swap them. "
+        "Return ONLY JSON: {\"title\":\"a short English title\", "
+        "\"story\":\"the passage IN ENGLISH\", "
+        "\"story_ja\":\"その英文の全文の自然な和訳\", "
+        "\"used_words\":[\"words you actually used\"], "
+        "\"vocab_notes\":[{\"en\":\"word\",\"ja\":\"この文脈での意味\"}]}."
+    )
+
+    def finish(raw: str) -> dict[str, Any] | None:
+        parsed = _safe_json(raw)
+        if parsed and parsed.get("story"):
+            story = str(parsed.get("story", "")).strip()
+            story_ja = str(parsed.get("story_ja", "")).strip()
+            if _is_mostly_japanese(story) and story_ja and not _is_mostly_japanese(story_ja):
+                story, story_ja = story_ja, story
+            if not _valid_story_text(story, words):
+                regenerated = _force_english_story(words, theme_txt, level, fmt_desc, len_desc)
+                if regenerated:
+                    story, story_ja = regenerated, ""
+            if not _valid_story_text(story, words):
+                return _story_generation_failed(words, story)
+            if not story_ja or _looks_untranslated(story, story_ja):
+                story_ja = _ensure_reply_ja(story, "")
+            notes = parsed.get("vocab_notes")
+            clean_notes = []
+            if isinstance(notes, list):
+                for n in notes:
+                    if isinstance(n, dict) and n.get("en"):
+                        clean_notes.append({"en": str(n.get("en", "")).strip(),
+                                            "ja": str(n.get("ja", "")).strip()})
+            used = parsed.get("used_words")
+            used = [str(u).strip() for u in used if str(u).strip()] if isinstance(used, list) else words
+            return {"online": True, "title": str(parsed.get("title", "")).strip(),
+                    "story": story, "story_ja": story_ja,
+                    "used_words": used or words, "vocab_notes": clean_notes, "note": ""}
+        cleaned = _plain_text(raw)
+        if cleaned:
+            if not _valid_story_text(cleaned, words):
+                cleaned = _force_english_story(words, theme_txt, level, fmt_desc, len_desc) or cleaned
+            if not _valid_story_text(cleaned, words):
+                return _story_generation_failed(words, cleaned)
+            return {"online": True, "title": "", "story": cleaned,
+                    "story_ja": _ensure_reply_ja(cleaned, ""),
+                    "used_words": words, "vocab_notes": [], "note": ""}
+        return None
+
+    return _stream_completion(
+        [{"role": "system", "content": sys},
+         {"role": "user", "content": f"Required terms:\n{required_lines}\nTheme: {theme_txt}"}],
+        temperature=0.4, max_tokens=1000, json_mode=True,
+        finish=finish,
+        fallback=lambda: generate_story(words, theme=theme, level=level, fmt=fmt, length=length),
+    )
 
 
 def _valid_story_text(story: str, required_terms: list[str]) -> bool:

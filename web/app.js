@@ -25,6 +25,55 @@ function toast(msg) {
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.add("hidden"), 2200);
 }
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+function thinkingHtml(text = "AIからの出力を受信中…") {
+  return `<div class="thinking"><span class="thinking-dots"><i></i><i></i><i></i></span><span>${esc(text)}</span></div>`;
+}
+async function streamPost(path, body, handlers = {}) {
+  const res = await fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  if (!res.body) return api(path.replace(/\/stream$/, ""), { method: "POST", body: JSON.stringify(body) });
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let final = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split(/\n/);
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const ev = JSON.parse(line);
+      if (ev.event === "delta") handlers.onDelta?.(ev.text || "");
+      else if (ev.event === "error") handlers.onError?.(ev.note || "");
+      else if (ev.event === "final") final = ev.result;
+    }
+  }
+  if (buf.trim()) {
+    const ev = JSON.parse(buf);
+    if (ev.event === "final") final = ev.result;
+  }
+  if (!final) throw new Error("stream finished without final result");
+  return final;
+}
+function liveAi(container, label) {
+  container.innerHTML = `<div class="ai-live">${thinkingHtml(label)}<pre></pre></div>`;
+  const pre = $("pre", container);
+  return {
+    append(text) {
+      pre.textContent += text;
+      pre.scrollTop = pre.scrollHeight;
+    },
+    note(text) {
+      if (text) pre.textContent += `\n[${text}]`;
+    },
+  };
+}
 
 // --- voices / tutor character ---
 let _voices = [];
@@ -84,6 +133,7 @@ function setAiBadge() {
   const speech = state.ai.speech || {};
   const chatOk = !!state.ai.online;
   const speechOk = !!speech.online;
+  const provider = state.ai.provider_label || "AI";
   el.classList.toggle("online", chatOk && speechOk);
   el.classList.toggle("partial", (chatOk || speechOk) && !(chatOk && speechOk));
   el.classList.toggle("offline", !chatOk && !speechOk);
@@ -92,7 +142,7 @@ function setAiBadge() {
     : speechOk ? "音声接続中"
     : "AIオフライン";
   el.title = [
-    `会話・翻訳: ${chatOk ? `接続中 (${state.ai.model || "model unknown"})` : "未接続"}`,
+    `会話・翻訳: ${provider} ${chatOk ? `接続中 (${state.ai.model || "model unknown"})` : "未接続"}`,
     `音声認識: ${speechOk ? `利用可 (${speech.model || "model unknown"})` : "未接続"}`,
     state.ai.note || speech.note || "クリックで再接続",
   ].join("\n");
@@ -177,7 +227,9 @@ routes.home = () => {
   </div>
 
   <h2>続きから / おすすめ</h2>
-  <div class="lesson-grid" id="homeLessons"></div>`;
+  <div class="lesson-grid" id="homeLessons"></div>
+
+  <p class="ai-disclaimer">※ AIによる和訳・添削・会話・長文生成などの結果には、誤りや不自然な表現が含まれる場合があります。学習の参考としてご利用ください。</p>`;
 
   const pick = pickRecommended();
   $("#homeLessons").innerHTML = pick.map(lessonCard).join("");
@@ -455,11 +507,14 @@ async function showGloss(anchor, text, mode, lessonId) {
   pop.style.left = Math.min(window.scrollX + r.left, window.scrollX + window.innerWidth - 270) + "px";
   pop.style.top = (window.scrollY + r.bottom + 6) + "px";
   $("#glossWord").textContent = text;
-  $("#glossBody").innerHTML = "<span style='color:#aaa'>翻訳中…</span>";
+  const live = liveAi($("#glossBody"), "AIからの翻訳出力を受信中…");
   pop.classList.remove("hidden");
   popCtx = { word: text, meaning: "", lesson: lessonId };
   try {
-    const t = await post("/translate", { text, mode, lesson_id: lessonId });
+    const t = await streamPost("/translate/stream", { text, mode, lesson_id: lessonId }, {
+      onDelta: delta => live.append(delta),
+      onError: note => live.note(note),
+    });
     popCtx.meaning = t.translation;
     $("#glossBody").innerHTML =
       `${t.pos ? `<span class="pos">${esc(t.pos)}</span> ` : ""}${esc(t.translation)}`
@@ -491,11 +546,14 @@ async function showGlossAtRect(rect, text, mode, lessonId) {
   pop.style.left = Math.min(window.scrollX + rect.left, window.scrollX + window.innerWidth - 270) + "px";
   pop.style.top = (window.scrollY + rect.bottom + 6) + "px";
   $("#glossWord").textContent = text.length > 40 ? text.slice(0, 38) + "…" : text;
-  $("#glossBody").innerHTML = "<span style='color:#aaa'>翻訳中…</span>";
+  const live = liveAi($("#glossBody"), "AIからの和訳出力を受信中…");
   pop.classList.remove("hidden");
   popCtx = { word: text, meaning: "", lesson: lessonId };
   try {
-    const t = await post("/translate", { text, mode, lesson_id: lessonId });
+    const t = await streamPost("/translate/stream", { text, mode, lesson_id: lessonId }, {
+      onDelta: delta => live.append(delta),
+      onError: note => live.note(note),
+    });
     popCtx.meaning = t.translation;
     $("#glossBody").innerHTML = esc(t.translation) + (t.note ? `<div class="note">${esc(t.note)}</div>` : "");
   } catch { $("#glossBody").textContent = "翻訳に失敗しました。"; }
@@ -543,7 +601,7 @@ async function doSpeechCheck(btn, L) {
   const said = line.querySelector(".said-input").value.trim();
   if (!said) { toast("言った内容を入力するか録音してください。"); return; }
   const fb = line.querySelector("[data-fb]");
-  fb.classList.remove("hidden"); fb.innerHTML = "チェック中…";
+  fb.classList.remove("hidden"); fb.innerHTML = thinkingHtml("AIが発話内容を確認中…");
   try {
     const r = await post("/speech/check", { target, said, level: state.profile.level });
     const cls = r.score >= 80 ? "score-good" : r.score >= 50 ? "score-mid" : "score-low";
@@ -575,11 +633,15 @@ function initChat(L) {
     input.value = "";
     addMsg(log, "me", text);
     history.push({ role: "user", content: text });
-    const thinking = addMsg(log, "vivi", "…");
+    const thinking = addMsg(log, "vivi", "");
+    const live = liveAi($(".msg", thinking), "AIからの返答を受信中…");
     try {
-      const r = await post("/chat", {
+      const r = await streamPost("/chat/stream", {
         messages: history.slice(-12), scenario: L.roleplay.scenario,
         level: state.profile.level, tutor_name: t.name, gender: t.gender,
+      }, {
+        onDelta: delta => live.append(delta),
+        onError: note => live.note(note),
       });
       if (r.reply && !r.reply_ja) {
         r.reply_ja = await translateChatReply(r.reply, L.id);
@@ -592,10 +654,13 @@ function initChat(L) {
   }
   async function showHelp() {
     helpBox.classList.remove("hidden");
-    helpBox.innerHTML = `<div class="muted">参考文案を生成中…</div>`;
+    const live = liveAi(helpBox, "AIからの参考文案出力を受信中…");
     try {
-      const r = await post("/chat/help", {
+      const r = await streamPost("/chat/help/stream", {
         messages: history.slice(-12), scenario: L.roleplay.scenario, level: state.profile.level,
+      }, {
+        onDelta: delta => live.append(delta),
+        onError: note => live.note(note),
       });
       helpBox.innerHTML = (r.suggestions || []).map((s, i) => `
         <button class="suggestion" data-suggest="${esc(s.en)}">
@@ -642,11 +707,12 @@ function addMsg(log, who, text, ja, fix, tip) {
   }
   const div = document.createElement("div");
   div.className = "msg " + who;
-  div.innerHTML = esc(text)
+  const isThinking = who === "vivi" && /Thinking/.test(String(text || ""));
+  div.innerHTML = isThinking ? thinkingHtml(text) : (esc(text)
     + (ja ? `<div class="mja ${chatShowJa ? "" : "hidden"}">${esc(ja)}</div>` : "")
     + (fix ? `<div class="fix">✏️ ${esc(fix)}</div>` : "")
-    + (tip ? `<div class="fix">💡 ${esc(tip)}</div>` : "");
-  if (who === "vivi" && text !== "…") {
+    + (tip ? `<div class="fix">💡 ${esc(tip)}</div>` : ""));
+  if (who === "vivi" && !isThinking && text) {
     const s = document.createElement("button"); s.className = "mini"; s.textContent = "🔊";
     s.style.marginTop = ".3rem"; s.onclick = () => speak(text, t.gender); div.appendChild(s);
   }
@@ -932,12 +998,15 @@ async function generateStory() {
   if (!picked.length) { toast("単語やフレーズを1つ以上選んでください。"); return; }
   const btn = $("#genStory");
   btn.disabled = true; const label = btn.textContent; btn.textContent = "生成中…";
-  out.innerHTML = `<div class="muted">AIが「${esc(wordsUI.theme || "おまかせ")}」のテーマで文章を作成中…</div>`;
+  const live = liveAi(out, `AIが「${wordsUI.theme || "おまかせ"}」の文章を生成中…`);
   try {
-    const r = await post("/words/story", {
+    const r = await streamPost("/words/story/stream", {
       words: picked, theme: wordsUI.theme,
       level: (state.profile && state.profile.level) || "beginner",
       format: wordsUI.format, length: wordsUI.length,
+    }, {
+      onDelta: delta => live.append(delta),
+      onError: note => live.note(note),
     });
     if (!r.story) {
       out.innerHTML = `<div class="notice">${esc(r.note || "文章を生成できませんでした。")}</div>`;
@@ -1077,7 +1146,11 @@ routes.reading = async () => {
     `<button class="seg ${readingUI.length === l.key ? "active" : ""}" data-readlen="${l.key}">${esc(l.label)}</button>`).join("");
 
   $("#app").innerHTML = `
-    <h1>長文読解サポート</h1>
+    <h1>長文読解サポート <span class="alpha-tag">α版</span></h1>
+    <div class="alpha-banner">
+      この機能は<b>α版（試験運用中）</b>です。解析や長文生成の精度は利用中のAIモデルの性能に依存し、
+      文構造や段落の判定が安定しないことがあります。結果はあくまで学習の参考としてご利用ください。
+    </div>
     <p class="sub">英文を入力するか、AIで長文を生成すると、文構造・5文型・段落の役割・重要シグナルを色分けして読めます。</p>
 
     <div class="reading-layout">
@@ -1152,9 +1225,41 @@ routes.reading = async () => {
 async function analyzeReadingInput() {
   readingUI.text = $("#readingText").value.trim();
   if (!readingUI.text) { toast("解析する英文を入力してください。"); return; }
-  renderReadingAnalysis(readingUI.text);
+  await analyzeReadingWithAi(readingUI.text);
   if (readingUI.translationSource !== readingUI.text) {
     await translateReadingText(false);
+  }
+}
+
+async function analyzeReadingWithAi(text) {
+  const btn = $("#analyzeReading");
+  const note = $("#readingAiNote");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "AI解析中…";
+  const live = liveAi($("#readingResult"), "AIからの解析JSONを受信中…");
+  note.textContent = "AIが文構造を解析しています。";
+  try {
+    const r = await streamPost("/reading/analyze/stream", {
+      text,
+      level: (state.profile && state.profile.level) || "beginner",
+    }, {
+      onDelta: delta => live.append(delta),
+      onError: note => live.note(note),
+    });
+    if (r.analysis) {
+      renderReadingAnalysis(text, normalizeLlmReadingAnalysis(r.analysis, text), r.note || "AI解析を表示しています。");
+      note.textContent = r.note || "AI解析を表示しています。";
+      return;
+    }
+    renderReadingAnalysis(text, null, r.note || "AI解析を取得できなかったため、簡易解析を表示しています。");
+    note.textContent = r.note || "AI解析を取得できなかったため、簡易解析を表示しています。";
+  } catch {
+    renderReadingAnalysis(text, null, "AI解析APIに接続できないため、簡易解析を表示しています。");
+    note.textContent = "AI解析APIに接続できないため、簡易解析を表示しています。";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 
@@ -1166,9 +1271,12 @@ async function translateReadingText(showToast = true) {
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = "和訳中…";
-  note.textContent = "英文全体を和訳しています。";
+  const live = liveAi(note, "AIからの和訳出力を受信中…");
   try {
-    const r = await post("/translate", { text, mode: "sentence", lesson_id: null });
+    const r = await streamPost("/translate/stream", { text, mode: "sentence", lesson_id: null }, {
+      onDelta: delta => live.append(delta),
+      onError: note => live.note(note),
+    });
     readingUI.translation = r.translation || "";
     readingUI.translationSource = readingUI.translation ? text : "";
     readingUI.note = r.note || (r.online ? "和訳を生成しました。" : "");
@@ -1200,9 +1308,9 @@ async function generateReadingPassage(level) {
   const label = btn.textContent;
   readingUI.genCount += 1;
   btn.disabled = true; btn.textContent = "生成中…";
-  note.textContent = "AIが読解練習用の長文を作成しています。";
+  const live = liveAi(note, "AIからの長文生成出力を受信中…");
   try {
-    const r = await requestReadingPassage(level);
+    const r = await requestReadingPassage(level, live);
     readingUI.text = normalizeReadingParagraphs(r.passage || "", readingTargetParagraphs());
     readingUI.translation = r.passage_ja || "";
     readingUI.translationSource = readingUI.text;
@@ -1210,6 +1318,7 @@ async function generateReadingPassage(level) {
     readingUI.note = r.note || (r.online ? "AI生成文を解析しました。" : "");
     toast(r.online ? "長文を生成しました" : "サンプル英文を表示しました");
     routes.reading();
+    setTimeout(() => analyzeReadingInput(), 0);
   } catch {
     note.textContent = "長文生成に失敗しました。AI接続を確認してください。";
   } finally {
@@ -1217,13 +1326,16 @@ async function generateReadingPassage(level) {
   }
 }
 
-async function requestReadingPassage(level) {
+async function requestReadingPassage(level, live = null) {
   const spec = readingGenerationSpec();
   try {
-    return await post("/reading/passage", {
+    return await streamPost("/reading/passage/stream", {
       topic: readingUI.topic || "reading practice",
       level,
       length: readingUI.length,
+    }, {
+      onDelta: delta => live?.append(delta),
+      onError: note => live?.note(note),
     });
   } catch {
     // Older running servers may not have the dedicated endpoint yet. Reuse the
@@ -1300,6 +1412,8 @@ const READING_PRONOUNS = new Set("i me my mine you your yours he him his she her
 const READING_FUNCTION_WORDS = new Set("a an the in on at by for from with without into onto over under between among through during before after of to as than and but or nor so yet if because although while since when where that which who whom whose".split(" "));
 const READING_PREPOSITIONS = new Set("in on at by for from with without into onto over under between among through during before after of to as than about around across against beyond near inside outside".split(" "));
 const READING_AUX = new Set("am is are was were be been being do does did have has had can could will would shall should may might must".split(" "));
+const READING_AUX_WITH_MAIN = new Set("do does did have has had can could will would shall should may might must".split(" "));
+const READING_NEGATIONS = new Set("not never".split(" "));
 const READING_LINKING = new Set("am is are was were be been being become becomes became seem seems seemed feel feels felt look looks looked sound sounds sounded remain remains remained appear appears appeared".split(" "));
 const READING_DITRANSITIVE = new Set("give gives gave send sends sent tell tells told show shows showed teach teaches taught offer offers offered ask asks asked bring brings brought buy buys bought lend lends lent".split(" "));
 const READING_OBJECT_COMPLEMENT = new Set("make makes made find finds found keep keeps kept call calls called name names named consider considers considered leave leaves left elect elects elected paint paints painted".split(" "));
@@ -1316,13 +1430,13 @@ const READING_SIGNAL_GROUPS = [
   { key: "reference", label: "指示語", phrases: ["this", "that", "these", "those", "it", "they", "them", "their"] },
 ];
 
-function renderReadingAnalysis(text) {
+function renderReadingAnalysis(text, analysis = null, modeNote = "") {
   const result = $("#readingResult");
   if (!text.trim()) {
     result.innerHTML = `<div class="notice">英文を入力すると解析結果が表示されます。</div>`;
     return;
   }
-  const a = analyzeReading(text);
+  const a = analysis || analyzeReading(text);
   const signalHtml = a.signals.length
     ? a.signals.slice(0, 20).map(s => `<span class="signal-chip ${s.key}">${esc(s.label)}: ${esc(s.match)}</span>`).join("")
     : `<span class="muted">接続語・指示語は少なめです。</span>`;
@@ -1335,6 +1449,7 @@ function renderReadingAnalysis(text) {
     </div>`).join("");
 
   result.innerHTML = `
+    ${modeNote ? `<div class="notice ok">${esc(modeNote)}</div>` : ""}
     <div class="reading-metrics">
       <div><b>${a.paragraphs.length}</b><span>段落</span></div>
       <div><b>${a.sentences.length}</b><span>文</span></div>
@@ -1359,6 +1474,133 @@ function renderReadingAnalysis(text) {
     const word = e.target.closest(".reading-token.word");
     if (word) showGloss(word, cleanWord(word.textContent), "word", null);
   };
+}
+
+function normalizeLlmReadingAnalysis(analysis, sourceText) {
+  const paragraphs = (analysis.paragraphs || []).map((p, pi) => {
+    const sentences = (p.sentences || [])
+      .map((s, si) => normalizeLlmSentence(s, pi, si, sourceText))
+      .filter(Boolean);
+    return {
+      index: pi,
+      role: p.role || "展開・補足",
+      reason: p.reason || "AIが段落の役割を推定しました。",
+      sentences,
+    };
+  }).filter(p => p.sentences.length);
+  const sentences = paragraphs.flatMap(p => p.sentences);
+  const signals = (analysis.signals && analysis.signals.length)
+    ? analysis.signals.map(normalizeLlmSignal).filter(Boolean)
+    : sentences.flatMap(s => s.signals);
+  if (!paragraphs.length) return analyzeReading(sourceText);
+  return { paragraphs, sentences, signals };
+}
+
+function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
+  const text = String(s.text || "").trim();
+  if (!text || isBadLlmValue(text) || containsJapanese(text) || !textCopiedFrom(text, sourceText)) return null;
+  const words = text.match(/[A-Za-z]+(?:'[A-Za-z]+)?|\d+/g) || [];
+  const lower = words.map(w => w.toLowerCase());
+  const signals = (s.signals || []).map(sig => normalizeLlmSignal(sig, text)).filter(Boolean);
+  const chunks = (s.chunks || []).map(c => ({
+    kind: normalizeChunkKind(c.kind),
+    label: isBadLlmValue(c.label) ? chunkLabelForKind(c.kind) : (c.label || chunkLabelForKind(c.kind)),
+    text: String(c.text || "").trim(),
+  })).filter(c => c.text && !isBadLlmValue(c.text) && !containsJapanese(c.text) && textCopiedFrom(c.text, text));
+  const wordClasses = words.map(() => new Set());
+  chunks.forEach(c => markChunkWords(words, wordClasses, c.text, classForChunk(c.kind)));
+  signals.forEach(sig => markChunkWords(words, wordClasses, sig.match, "rs-signal"));
+  lower.forEach((w, i) => {
+    if (READING_PRONOUNS.has(w)) wordClasses[i].add("rs-pronoun");
+    if (READING_FUNCTION_WORDS.has(w)) wordClasses[i].add("rs-function");
+  });
+  return {
+    text, words, lower, paragraphIndex, sentenceIndex,
+    pattern: isBadLlmValue(s.pattern) ? "文型不明" : (s.pattern || "文型不明"),
+    focus: isBadLlmValue(s.focus) ? "詳細" : (s.focus || "詳細"),
+    chunks,
+    signals,
+    wordClasses,
+  };
+}
+
+function normalizeLlmSignal(sig, context = "") {
+  if (!sig || !sig.match) return null;
+  const match = String(sig.match || "").trim();
+  if (isBadLlmValue(match) || containsJapanese(match) || (context && !textCopiedFrom(match, context))) return null;
+  return {
+    key: sig.key || "reference",
+    label: isBadLlmValue(sig.label) ? (sig.key || "指示語") : (sig.label || sig.key || "指示語"),
+    match,
+    words: match.toLowerCase().match(/[a-z]+(?:'[a-z]+)?|\d+/g) || [],
+  };
+}
+
+function isBadLlmValue(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return true;
+  return text === "..." || text.includes("exact original sentence")
+    || text.includes("exact words from the sentence")
+    || text.includes("exact signal word or phrase")
+    || text.includes("sv/svc/svo/svoo/svoc + japanese explanation")
+    || text.includes("要点/対比/理由・原因/結果/結論/具体例/詳細など")
+    || text.includes("接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句")
+    || text.includes("日本語ラベル");
+}
+
+function containsJapanese(value) {
+  return /[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]/.test(String(value || ""));
+}
+
+function textCopiedFrom(needle, haystack) {
+  const n = String(needle || "").trim().toLowerCase().replace(/^[.,;:!?]+|[.,;:!?]+$/g, "");
+  const h = String(haystack || "").trim().toLowerCase();
+  return !!n && h.includes(n);
+}
+
+function normalizeChunkKind(kind) {
+  const k = String(kind || "").toLowerCase();
+  if (["connector", "subject", "verb", "object", "complement", "modifier"].includes(k)) return k;
+  return "modifier";
+}
+
+function chunkLabelForKind(kind) {
+  return {
+    connector: "接続語",
+    subject: "S 主語",
+    verb: "V 動詞",
+    object: "O 目的語",
+    complement: "C 補語",
+    modifier: "修飾句",
+  }[normalizeChunkKind(kind)] || "修飾句";
+}
+
+function classForChunk(kind) {
+  return {
+    connector: "rs-signal",
+    subject: "rs-subject",
+    verb: "rs-verb",
+    object: "rs-object",
+    complement: "rs-object",
+    modifier: "",
+  }[normalizeChunkKind(kind)] || "";
+}
+
+function markChunkWords(words, wordClasses, phrase, cls) {
+  if (!cls || !phrase) return;
+  const target = String(phrase).toLowerCase().match(/[a-z]+(?:'[a-z]+)?|\d+/g) || [];
+  if (!target.length) return;
+  const lower = words.map(w => w.toLowerCase());
+  for (let i = 0; i <= lower.length - target.length; i++) {
+    let ok = true;
+    for (let j = 0; j < target.length; j++) {
+      if (lower[i + j] !== target[j]) { ok = false; break; }
+    }
+    if (ok) {
+      for (let j = 0; j < target.length; j++) wordClasses[i + j].add(cls);
+      return;
+    }
+  }
 }
 
 function renderReadingSentence(s) {
@@ -1439,14 +1681,26 @@ function findReadingVerb(lower) {
   for (let i = 0; i < lower.length; i++) {
     const w = lower[i];
     if (READING_AUX.has(w)) {
-      const end = lower[i + 1] && !READING_FUNCTION_WORDS.has(lower[i + 1]) ? i + 1 : i;
+      let end = i;
+      let j = i + 1;
+      if (READING_NEGATIONS.has(lower[j])) {
+        end = j;
+        j += 1;
+      }
+      if (READING_AUX_WITH_MAIN.has(w) && lower[j] && isReadingVerbLike(lower[j])) {
+        end = j;
+      }
       return { start: i, end, word: lower[end] || w };
     }
-    if (READING_COMMON_VERBS.has(w) || /(?:ed|ing|ize|ise)$/.test(w)) {
+    if (isReadingVerbLike(w)) {
       return { start: i, end: i, word: w };
     }
   }
   return { start: -1, end: -1, word: "" };
+}
+
+function isReadingVerbLike(word) {
+  return READING_COMMON_VERBS.has(word) || /(?:ed|ing|ize|ise)$/.test(word);
 }
 
 function firstContentIndex(lower, verbStart) {
@@ -1473,9 +1727,12 @@ function readingChunks(words, lower, verb, pattern) {
   if (!words.length) return [];
   if (verb.start < 0) return [{ label: "文", text: words.join(" "), kind: "all" }];
   const chunks = [];
-  const sText = words.slice(0, verb.start).join(" ").trim();
+  const subjectStart = Math.max(0, firstContentIndex(lower, verb.start));
+  const leadText = words.slice(0, subjectStart).join(" ").trim();
+  const sText = words.slice(subjectStart, verb.start).join(" ").trim();
   const vText = words.slice(verb.start, verb.end + 1).join(" ").trim();
   const rest = words.slice(verb.end + 1);
+  if (leadText) chunks.push({ label: "接続語", text: leadText, kind: "modifier" });
   if (sText) chunks.push({ label: "S 主語", text: sText, kind: "subject" });
   if (vText) chunks.push({ label: "V 動詞", text: vText, kind: "verb" });
   if (rest.length) {
@@ -1538,12 +1795,14 @@ function paragraphRole(text, index, total) {
 
 // ---------- PROFILE / SETTINGS ----------
 routes.profile = async () => {
-  const [profile, health] = await Promise.all([
+  const [profile, health, providerInfo] = await Promise.all([
     api("/profile"),
     api("/health").catch(() => null),
+    api("/ai/provider").catch(() => null),
   ]);
   const p = state.profile = profile;
   if (health?.ai) state.ai = health.ai;
+  if (providerInfo?.status) state.ai = providerInfo.status;
   state.ai.speech = await api("/speech/status").catch(() => state.ai.speech || {});
   setAiBadge();
   const styles = state.artStyles = state.artStyles || await api("/art-styles");
@@ -1551,6 +1810,14 @@ routes.profile = async () => {
   const chatOk = !!state.ai.online;
   const speechOk = !!speech.online;
   const speechCache = speechOk ? (speech.cached ? "ダウンロード済み" : "未ダウンロード/初回準備") : "利用不可";
+  const provider = (providerInfo?.provider || state.ai.provider || "foundry");
+  const providerLabel = state.ai.provider_label || providerInfo?.provider_label || "Foundry Local";
+  const baseUrl = providerInfo?.base_url || "";
+  const providerOptions = [
+    ["foundry", "Foundry Local"],
+    ["ollama", "Ollama"],
+    ["openai", "OpenAI互換URL"],
+  ].map(([v, label]) => `<option value="${v}" ${provider === v ? "selected" : ""}>${label}</option>`).join("");
   const styleOpts = Object.entries(styles.presets).map(([k, s]) => `
     <div class="style-opt ${k === p.art_style ? "active" : ""}" data-style="${k}">
       <h4>${esc(s.name_ja)}</h4><p>${esc(s.description_ja)}</p></div>`).join("");
@@ -1581,16 +1848,39 @@ routes.profile = async () => {
     <p class="sub">${esc(styles.note_ja)}</p>
     <div class="style-grid">${styleOpts}</div>
     <div style="margin-top:1.5rem"><button class="btn" id="saveProfile">保存する</button></div>
-    <h2>AI接続（Foundry Local）</h2>
+    <h2>AI接続</h2>
     <div class="card ai-panel">
+      <div class="provider-grid">
+        <div>
+          <label>AIプロバイダー</label>
+          <select id="aiProvider">${providerOptions}</select>
+        </div>
+        <div>
+          <label>接続URL</label>
+          <input id="aiBaseUrl" value="${esc(baseUrl)}" placeholder="http://localhost:11434/v1" />
+        </div>
+        <div>
+          <label>APIキー</label>
+          <input id="aiApiKey" type="password" placeholder="${providerInfo?.has_api_key ? "保存済み（変更時のみ入力）" : "任意"}" />
+        </div>
+        <button class="btn sm" id="saveAiProvider">接続先を保存</button>
+      </div>
+      <p class="sub provider-help" id="aiProviderHelp"></p>
       <div class="ai-row">
         <div>
-          <div class="ai-kind">会話・翻訳・採点</div>
+          <div class="ai-kind">会話・翻訳・採点（${esc(providerLabel)}）</div>
           <div class="muted" id="aiChatModels">会話: ${esc(state.ai.model || "モデル未確認")}<br>和訳・添削: ${esc(state.ai.translate_model || state.ai.model || "モデル未確認")}</div>
         </div>
         <b id="aiChatConn" class="${chatOk ? "ok-text" : "warn-text"}">${chatOk ? "接続中 ✓" : "未接続"}</b>
       </div>
       <div class="ai-note" id="aiChatNote">${esc(state.ai.note || "")}</div>
+      <div class="ai-test-box">
+        <div class="ai-test-actions">
+          <button class="btn sm" id="testChatModel">会話モデルをテスト</button>
+          <button class="btn sm ghost" id="testTranslateModel">和訳モデルをテスト</button>
+        </div>
+        <div id="aiTestResult" class="ai-test-result muted">接続中のモデルに短いリクエストを送り、実際に応答できるか確認できます。</div>
+      </div>
       <div class="ai-row">
         <div>
           <div class="ai-kind">音声認識（Whisper）</div>
@@ -1599,16 +1889,11 @@ routes.profile = async () => {
         <b id="aiSpeechConn" class="${speechOk ? "ok-text" : "warn-text"}">${speechOk ? "接続中 ✓" : "未接続"}</b>
       </div>
       <div class="ai-note" id="aiSpeechNote">${esc(speech.note || "")}</div>
-      <p class="sub" style="margin:.8rem 0 0">録音して発話は音声認識（Whisper）で文字起こししたあと、会話・翻訳モデルで採点します。どちらの状態もここで確認できます。</p>
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.7rem">
-        <button class="btn sm ghost" id="reconnect">再接続を試す</button>
-        <button class="btn sm ghost" id="refreshSpeech">音声認識を確認</button>
-        <button class="btn sm" id="prepareAi">AI/Whisperを準備</button>
-      </div>
+      <p class="sub" style="margin:.8rem 0 0">録音して発話は音声認識（Whisper）で文字起こししたあと、選択中の会話・翻訳モデルで採点します。音声認識は Foundry Local のWhisperを使います。</p>
     </div>
 
     <h2>AIモデルの選択・追加</h2>
-    <p class="sub">用途ごとに使用するモデルを切り替えたり、新しいモデルをダウンロードできます。ダウンロード済み（緑）のモデルはすぐに利用できます。</p>
+    <p class="sub">用途ごとに使用するモデルを切り替えられます。Foundry Localでは未取得モデルのダウンロードもここから開始できます。</p>
     <div class="card model-panel" id="modelPanel">
       <div class="muted">モデル一覧を読み込み中…</div>
     </div>`;
@@ -1635,20 +1920,91 @@ routes.profile = async () => {
     });
     toast("設定を保存しました");
   });
-  $("#reconnect").addEventListener("click", async () => {
-    state.ai = await post("/ai/reconnect", {}); setAiBadge(); routes.profile();
-  });
-  $("#refreshSpeech").addEventListener("click", async () => {
-    state.ai.speech = await api("/speech/status"); setAiBadge(); routes.profile();
-  });
-  $("#prepareAi").addEventListener("click", async () => {
-    await post("/ai/setup", {});
-    toast("AI/Whisperの準備を開始しました");
-    initAiSetup();
-  });
-
+  bindAiProviderForm();
+  bindAiTestButtons();
   loadModelPanel();
 };
+
+function bindAiProviderForm() {
+  const providerEl = $("#aiProvider");
+  const baseEl = $("#aiBaseUrl");
+  const keyEl = $("#aiApiKey");
+  const helpEl = $("#aiProviderHelp");
+  if (!providerEl || !baseEl || !keyEl) return;
+  const defaults = {
+    foundry: "",
+    ollama: "http://localhost:11434/v1",
+    openai: "",
+  };
+  const helps = {
+    foundry: "Foundry Localを自動起動・自動検出します。接続URLとAPIキーは通常不要です。",
+    ollama: "Ollamaを使う場合は先にOllamaを起動し、モデルをpullしてください。例: ollama pull qwen2.5:3b",
+    openai: "OpenAI互換の /v1 エンドポイントを指定できます。必要な場合だけAPIキーを入力してください。",
+  };
+  const sync = () => {
+    const p = providerEl.value;
+    baseEl.disabled = p === "foundry";
+    keyEl.disabled = p === "foundry";
+    baseEl.placeholder = defaults[p] || "";
+    helpEl.textContent = helps[p] || "";
+    if (p === "ollama" && !baseEl.value.trim()) baseEl.value = defaults.ollama;
+    if (p === "foundry") baseEl.value = "";
+  };
+  providerEl.addEventListener("change", sync);
+  sync();
+
+  $("#saveAiProvider").addEventListener("click", async () => {
+    const provider = providerEl.value;
+    const body = { provider };
+    if (provider !== "foundry") body.base_url = baseEl.value.trim();
+    if (keyEl.value.trim()) body.api_key = keyEl.value.trim();
+    try {
+      state.ai = await post("/ai/provider", body);
+      setAiBadge();
+      toast(state.ai.online ? "AI接続先を保存して接続しました" : "AI接続先を保存しました");
+      routes.profile();
+    } catch {
+      toast("AI接続先の保存に失敗しました");
+    }
+  });
+}
+
+function bindAiTestButtons() {
+  const chatBtn = $("#testChatModel");
+  const translateBtn = $("#testTranslateModel");
+  const out = $("#aiTestResult");
+  if (!chatBtn || !translateBtn || !out) return;
+  const run = async (kind, btn) => {
+    const buttons = [chatBtn, translateBtn];
+    const labels = new Map(buttons.map(b => [b, b.textContent]));
+    buttons.forEach(b => b.disabled = true);
+    btn.textContent = "テスト中…";
+    out.className = "ai-test-result";
+    out.innerHTML = thinkingHtml(`${kind === "translate" ? "和訳" : "会話"}モデルへテスト送信中…`);
+    try {
+      const r = await post("/ai/test", { kind });
+      if (r.status) {
+        state.ai = r.status;
+        setAiBadge();
+        refreshAiConnectionPanel();
+      }
+      const cls = r.ok ? "notice ok" : "notice";
+      const elapsed = r.elapsed_ms != null ? ` / ${r.elapsed_ms}ms` : "";
+      const sample = r.sample ? `<div class="ai-test-sample">${esc(r.sample)}</div>` : "";
+      out.className = "ai-test-result";
+      out.innerHTML = `<div class="${cls}"><b>${r.ok ? "テスト成功" : "テスト失敗"}</b><br>
+        ${esc(r.provider_label || "AI")} / ${esc(r.model || "モデル未確認")}${elapsed}<br>
+        <span class="muted">${esc(r.note || "")}</span>${sample}</div>`;
+    } catch (e) {
+      out.className = "ai-test-result";
+      out.innerHTML = `<div class="notice">テストAPIに接続できませんでした。<br><span class="muted">${esc(String(e))}</span></div>`;
+    } finally {
+      buttons.forEach(b => { b.disabled = false; b.textContent = labels.get(b); });
+    }
+  };
+  chatBtn.addEventListener("click", () => run("chat", chatBtn));
+  translateBtn.addEventListener("click", () => run("translate", translateBtn));
+}
 
 // ---------- AI model management (settings) ----------
 const MODEL_KINDS = [
@@ -1688,7 +2044,7 @@ function modelStateLine(kind, cur, configured, active) {
     return `現在使用中: ${active.id}${suffix}`;
   }
   if (configured) return `選択中: ${configured.id}（未読み込み）`;
-  if (cur) return `選択設定: ${cur}（未ダウンロード）`;
+  if (cur) return `選択設定: ${cur}（${kind.external ? "接続先で未検出" : "未ダウンロード"}）`;
   return "会話モデルと同じ";
 }
 
@@ -1709,8 +2065,11 @@ async function loadModelPanel() {
   }
   const models = data.models || [];
   const sel = data.selected || {};
+  const manageable = data.manageable !== false;
+  const providerName = data.status?.provider_label || state.ai.provider_label || "接続先";
+  const modelKinds = manageable ? MODEL_KINDS : MODEL_KINDS.filter(k => k.kind !== "transcribe");
 
-  const rows = MODEL_KINDS.map(k => {
+  const rows = modelKinds.map(k => {
     // Only cached (downloaded) models can be selected for use.
     const opts = models.filter(k.filter).filter(m => m.cached);
     const cur = sel[k.kind] || "";
@@ -1720,10 +2079,10 @@ async function loadModelPanel() {
     const selectedValue = k.allowDefault && !cur ? "" : (selectedModel ? selectedModel.id : "");
     const hasSelectedValue = selectedValue && opts.some(m => m.id === selectedValue);
     const missingOpt = cur && !hasSelectedValue && !(k.allowDefault && !cur)
-      ? `<option value="${esc(cur)}" selected disabled>${esc(cur)}（未ダウンロード）</option>`
+      ? `<option value="${esc(cur)}" selected disabled>${esc(cur)}（${manageable ? "未ダウンロード" : "未検出"}）</option>`
       : "";
     const empty = opts.length === 0
-      ? `<div class="muted" style="font-size:.82rem">ダウンロード済みのモデルがありません。下のカタログから取得してください。</div>`
+      ? `<div class="muted" style="font-size:.82rem">${manageable ? "ダウンロード済みのモデルがありません。下のカタログから取得してください。" : "接続先から利用可能なモデルを取得できませんでした。"}</div>`
       : "";
     const optionTags = (k.allowDefault ? [`<option value="" ${!cur ? "selected" : ""}>（会話モデルと同じ）</option>`] : [])
       .concat(missingOpt ? [missingOpt] : [])
@@ -1738,7 +2097,7 @@ async function loadModelPanel() {
         </div>
         <div class="model-row-ctl">
           ${opts.length ? `<select class="model-select" data-kind="${k.kind}">${optionTags}</select>` : empty}
-          <div class="model-state">${esc(modelStateLine(k, cur, configured, active))}</div>
+          <div class="model-state">${esc(modelStateLine({ ...k, external: !manageable }, cur, configured, active))}</div>
         </div>
       </div>`;
   }).join("");
@@ -1746,8 +2105,9 @@ async function loadModelPanel() {
   // List of all models with download buttons for not-yet-cached ones.
   const catalog = models.map(m => {
     const activeKinds = (m.active_kinds || []).map(k => MODEL_KIND_LABELS[k] || k);
+    const readyText = manageable ? "ダウンロード済み" : "利用可能";
     const badge = m.cached
-      ? `<span class="model-badge ok">ダウンロード済み</span>`
+      ? `<span class="model-badge ok">${readyText}</span>`
       : `<span class="model-badge">未取得</span>`;
     const activeBadge = activeKinds.length
       ? `<span class="model-badge active">使用中: ${esc(activeKinds.join("・"))}</span>`
@@ -1758,7 +2118,9 @@ async function loadModelPanel() {
     const kindJa = m.kind === "speech" ? "音声" : m.kind === "chat" ? "会話" : "その他";
     const act = m.cached
       ? `${activeBadge}${loadedBadge}`
-      : `<button class="btn sm" data-dl="${esc(m.id)}" data-dlkind="${m.kind === "speech" ? "transcribe" : "chat"}">⬇ ダウンロード</button>`;
+      : manageable
+        ? `<button class="btn sm" data-dl="${esc(m.id)}" data-dlkind="${m.kind === "speech" ? "transcribe" : "chat"}">⬇ ダウンロード</button>`
+        : `<span class="model-badge">接続先側で管理</span>`;
     return `
       <div class="catalog-row" data-row="${esc(m.id)}">
         <div><span class="model-id">${esc(m.id)}</span> <span class="model-kind">${kindJa}</span></div>
@@ -1767,8 +2129,9 @@ async function loadModelPanel() {
   }).join("") || `<div class="muted">利用可能なモデルがありません。</div>`;
 
   panel.innerHTML = `
+    ${manageable ? "" : `<div class="notice">モデルの追加・削除は${esc(providerName)}側で行ってください。この画面では接続先が返したモデルを選択できます。</div>`}
     <div class="model-selects">${rows}</div>
-    <div class="field-label" style="margin-top:1rem">カタログ（ダウンロード）</div>
+    <div class="field-label" style="margin-top:1rem">${manageable ? "カタログ（ダウンロード）" : "接続先モデル"}</div>
     <div class="catalog-list">${catalog}</div>`;
 
   $$(".model-select", panel).forEach(s => s.addEventListener("change", async () => {
