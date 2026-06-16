@@ -44,9 +44,9 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1").stri
 FOUNDRY_BASE_URL = os.getenv("FOUNDRY_BASE_URL", "").strip()
 FOUNDRY_API_KEY = os.getenv("FOUNDRY_API_KEY", "notneeded")
 
-# Model aliases. Foundry Local resolves an alias to the best variant for the
-# current hardware, so we keep them configurable.
-CHAT_MODEL = os.getenv("VIVE_CHAT_MODEL", "qwen2.5-1.5b")
+# Model aliases / ids. Use the CPU text model by default so first launch can
+# download and run on a broad range of Foundry Local installs.
+CHAT_MODEL = os.getenv("VIVE_CHAT_MODEL", "qwen3.5-2b-text-generic-cpu")
 # Optional model dedicated to Japanese translation / correction. Leave empty to
 # reuse CHAT_MODEL. Set this to a larger Japanese-capable chat model when small
 # models copy English instead of translating.
@@ -70,8 +70,9 @@ FOUNDRY_PORT = os.getenv("VIVE_FOUNDRY_PORT", "").strip()
 # Host to bind the managed service to.
 FOUNDRY_HOST = os.getenv("VIVE_FOUNDRY_HOST", "127.0.0.1").strip()
 
-# Auto-load the chat model on startup if it is already cached (no surprise
-# multi-GB downloads — uncached models are left for the user to `foundry model run`).
+# Auto-prepare the chat model on startup. When enabled, ViveEnglish starts
+# Foundry Local, downloads the configured chat model if it is missing, and loads
+# it in the background so AI features become available after first launch.
 AUTOLOAD_MODEL = os.getenv("VIVE_AUTOLOAD_MODEL", "1") not in ("0", "false", "False")
 
 # Request timeout (seconds) for AI calls.

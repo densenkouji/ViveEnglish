@@ -1893,7 +1893,7 @@ routes.profile = async () => {
     </div>
 
     <h2>AIモデルの選択・追加</h2>
-    <p class="sub">用途ごとに使用するモデルを切り替えられます。Foundry Localでは未取得モデルのダウンロードもここから開始できます。</p>
+    <p class="sub">用途ごとに使用するモデルを切り替えられます。Foundry Localでは未取得モデルのダウンロードや取得済みモデルの削除もここから行えます。</p>
     <div class="card model-panel" id="modelPanel">
       <div class="muted">モデル一覧を読み込み中…</div>
     </div>`;
@@ -2116,8 +2116,11 @@ async function loadModelPanel() {
       ? `<span class="model-badge loaded">読み込み済み</span>`
       : "";
     const kindJa = m.kind === "speech" ? "音声" : m.kind === "chat" ? "会話" : "その他";
+    const deleteBtn = manageable && m.cached
+      ? `<button class="btn sm danger" data-delmodel="${esc(m.id)}" data-active="${activeKinds.length ? "1" : ""}">削除</button>`
+      : "";
     const act = m.cached
-      ? `${activeBadge}${loadedBadge}`
+      ? `${activeBadge}${loadedBadge}${deleteBtn}`
       : manageable
         ? `<button class="btn sm" data-dl="${esc(m.id)}" data-dlkind="${m.kind === "speech" ? "transcribe" : "chat"}">⬇ ダウンロード</button>`
         : `<span class="model-badge">接続先側で管理</span>`;
@@ -2131,7 +2134,7 @@ async function loadModelPanel() {
   panel.innerHTML = `
     ${manageable ? "" : `<div class="notice">モデルの追加・削除は${esc(providerName)}側で行ってください。この画面では接続先が返したモデルを選択できます。</div>`}
     <div class="model-selects">${rows}</div>
-    <div class="field-label" style="margin-top:1rem">${manageable ? "カタログ（ダウンロード）" : "接続先モデル"}</div>
+    <div class="field-label" style="margin-top:1rem">${manageable ? "カタログ（ダウンロード・削除）" : "接続先モデル"}</div>
     <div class="catalog-list">${catalog}</div>`;
 
   $$(".model-select", panel).forEach(s => s.addEventListener("change", async () => {
@@ -2145,6 +2148,9 @@ async function loadModelPanel() {
   }));
   $$("[data-dl]", panel).forEach(b => b.addEventListener("click", () => {
     startModelDownload(b.dataset.dl, b.dataset.dlkind, b);
+  }));
+  $$("[data-delmodel]", panel).forEach(b => b.addEventListener("click", () => {
+    deleteModel(b.dataset.delmodel, b.dataset.active === "1", b);
   }));
 }
 
@@ -2195,6 +2201,31 @@ async function startModelDownload(alias, kind, btn) {
     }
     renderDl(s);
   }, 1200);
+}
+
+async function deleteModel(alias, isActive, btn) {
+  if (_dlPoll) { toast("ダウンロード中は削除できません"); return; }
+  const msg = isActive
+    ? `${alias} は現在使用中です。削除すると選択設定を解除します。削除しますか？`
+    : `${alias} を削除しますか？`;
+  if (!confirm(msg)) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "削除中…";
+  try {
+    const data = await post("/ai/models/delete", { alias });
+    if (data.status) {
+      state.ai = data.status;
+      setAiBadge();
+      refreshAiConnectionPanel();
+    }
+    toast(`${alias} を削除しました`);
+    loadModelPanel();
+  } catch {
+    btn.disabled = false;
+    btn.textContent = original;
+    toast("モデルの削除に失敗しました");
+  }
 }
 
 // ---------- audio: webm/opus blob -> 16k mono WAV ----------

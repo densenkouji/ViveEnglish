@@ -109,6 +109,10 @@ class ModelDownloadReq(BaseModel):
     kind: str = "chat"   # chat|translate|transcribe
 
 
+class ModelDeleteReq(BaseModel):
+    alias: str
+
+
 class AiProviderReq(BaseModel):
     provider: str         # foundry|ollama|openai
     base_url: str | None = None
@@ -194,6 +198,15 @@ def ai_models_download(req: ModelDownloadReq) -> dict[str, Any]:
     """Download (and load) a catalog model in the background, with progress."""
     try:
         return foundry.download_model_async(req.alias, kind=req.kind)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/ai/models/delete")
+def ai_models_delete(req: ModelDeleteReq) -> dict[str, Any]:
+    """Remove a downloaded Foundry Local model from the local cache."""
+    try:
+        return foundry.delete_model(req.alias)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 

@@ -235,6 +235,27 @@ def set_model_preference(kind: str, alias: str | None) -> dict[str, Any]:
     return status()
 
 
+def _clear_foundry_preferences(model_id: str, alias: str) -> list[str]:
+    """Clear saved Foundry model choices that point at a removed model."""
+    settings = _prefs()
+    store = _provider_model_store(settings, "foundry")
+    cleared: list[str] = []
+    for kind, key in (("chat", "chat_model"), ("translate", "translate_model"),
+                      ("transcribe", "transcribe_model")):
+        val = (store.get(key) or "").strip()
+        if val and _model_ref_matches(val, model_id, alias):
+            store[key] = ""
+            cleared.append(kind)
+        legacy = (settings.get(key) or "").strip()
+        if legacy and _model_ref_matches(legacy, model_id, alias):
+            settings.pop(key, None)
+            if kind not in cleared:
+                cleared.append(kind)
+    if cleared:
+        database.update_profile(settings=settings)
+    return cleared
+
+
 # --- URL / port helpers ----------------------------------------------------
 
 def _normalize(url: str) -> str:
@@ -1380,6 +1401,63 @@ def download_model_async(alias: str, *, kind: str = "chat") -> dict[str, Any]:
             target=_run_download, args=(alias, kind), daemon=True)
         _setup_thread.start()
         return dict(_setup)
+
+
+def delete_model(alias: str) -> dict[str, Any]:
+    """Remove a downloaded Foundry Local model from the local cache."""
+    if eff_ai_provider() != "foundry":
+        raise ValueError("現在のAIプロバイダーでは、モデルは接続先側で管理してください。")
+    alias = (alias or "").strip()
+    if not alias:
+        raise ValueError("model alias is required")
+    with _setup_lock:
+        if _setup["state"] in ("checking", "preparing", "downloading", "loading"):
+            raise ValueError("モデルの準備中です。完了してから削除してください。")
+        if _setup_thread is not None and _setup_thread.is_alive():
+            raise ValueError("モデルの準備中です。完了してから削除してください。")
+
+    mgr, err = _sdk_manager(initialize=True)
+    if mgr is None:
+        raise ValueError(f"ローカルAIサービスに接続できません: {err or ''}")
+
+    model = _find_catalog_model(mgr, alias)
+    if model is None:
+        raise ValueError(f"モデル「{alias}」がカタログに見つかりませんでした。")
+
+    mid = getattr(model, "id", "") or alias
+    model_alias = getattr(model, "alias", "") or alias
+    if not getattr(model, "is_cached", False):
+        raise ValueError(f"モデル「{mid}」はダウンロードされていません。")
+
+    was_selected_or_active = any(
+        _model_ref_matches(ref, mid, model_alias)
+        for ref in (eff_chat_model(), eff_translate_model(), eff_transcribe_model(),
+                    _model, _translate_model)
+        if ref
+    )
+    try:
+        if getattr(model, "is_loaded", False):
+            model.unload()
+    except Exception:
+        pass
+    try:
+        model.remove_from_cache()
+    except Exception as exc:
+        raise ValueError(f"モデル「{mid}」の削除に失敗しました: {exc}") from exc
+
+    invalidate = getattr(mgr.catalog, "_invalidate_cache", None)
+    if callable(invalidate):
+        try:
+            invalidate()
+        except Exception:
+            pass
+    cleared = _clear_foundry_preferences(mid, model_alias)
+    if was_selected_or_active or any(k in cleared for k in ("chat", "translate")):
+        reconnect()
+
+    data = list_models()
+    data["deleted"] = {"id": mid, "alias": model_alias, "cleared_kinds": cleared}
+    return data
 
 
 def _find_catalog_model(manager, ident: str):
