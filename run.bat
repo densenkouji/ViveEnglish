@@ -1,6 +1,6 @@
 @echo off
 REM ViveEnglish launcher for Windows.
-setlocal
+setlocal EnableDelayedExpansion
 
 if exist .venv\Scripts\python.exe (
   .venv\Scripts\python.exe -c "import sys" >nul 2>nul
@@ -24,7 +24,7 @@ if not exist .venv (
     set PY=python
   )
   echo [ViveEnglish] Creating virtual environment...
-  %PY% -m venv .venv
+  !PY! -m venv .venv
   if errorlevel 1 (
     echo [ViveEnglish] Failed to create the virtual environment.
     pause

@@ -25,6 +25,15 @@
 
 ## 動かし方
 
+### 0. 事前準備
+
+- 実行にはPythonが必要なため、未インストールの場合は次のコマンドをPowerShellで実行してください。
+
+Windows:
+``` PowerShell
+winget install --id Python.Python.3.14
+```
+
 ### 1. アプリ本体（これだけで動きます）
 
 Windows:
