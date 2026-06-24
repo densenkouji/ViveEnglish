@@ -1419,6 +1419,10 @@ function readingTopicTerms(spec) {
 const READING_PRONOUNS = new Set("i me my mine you your yours he him his she her hers it its we us our ours they them their theirs this that these those who whom which whose".split(" "));
 const READING_FUNCTION_WORDS = new Set("a an the in on at by for from with without into onto over under between among through during before after of to as than and but or nor so yet if because although while since when where that which who whom whose".split(" "));
 const READING_PREPOSITIONS = new Set("in on at by for from with without into onto over under between among through during before after of to as than about around across against beyond near inside outside".split(" "));
+// Subordinating conjunctions that open an adverbial clause. We cut the post-verb
+// span here so a clause like "when they see ..." becomes its own modifier chunk
+// instead of being swallowed into the object/complement of the main clause.
+const READING_SUBORDINATORS = new Set("when while because since although though if unless until whereas before after as".split(" "));
 const READING_AUX = new Set("am is are was were be been being do does did have has had can could will would shall should may might must".split(" "));
 const READING_AUX_WITH_MAIN = new Set("do does did have has had can could will would shall should may might must".split(" "));
 const READING_NEGATIONS = new Set("not never".split(" "));
@@ -1466,6 +1470,7 @@ function renderReadingAnalysis(text, analysis = null, modeNote = "", noteKind = 
     </div>
     <div class="reading-legend">
       <span><i class="subj"></i>主語</span><span><i class="verb"></i>動詞</span>
+      <span><i class="interrog"></i>疑問詞</span><span><i class="aux"></i>助動詞</span>
       <span><i class="pron"></i>代名詞/指示語</span><span><i class="func"></i>前置詞・接続詞など</span>
       <span><i class="sig"></i>理由・結果・結論</span>
     </div>
@@ -1512,9 +1517,11 @@ function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
   const signals = (s.signals || []).map(sig => normalizeLlmSignal(sig, text)).filter(Boolean);
   const chunks = (s.chunks || []).map(c => {
     const kind = normalizeChunkKind(c.kind);
+    const ctext = String(c.text || "").trim();
     // Always derive the label from the canonical kind so the UI never shows the
-    // model's English label ("subject", "linking verb", …).
-    return { kind, label: chunkLabelForKind(kind), text: String(c.text || "").trim() };
+    // model's English label ("subject", "linking verb", …). The interrogative
+    // label also depends on the wh-word (疑問副詞/疑問代名詞).
+    return { kind, label: chunkLabelForKind(kind, ctext), text: ctext };
   }).filter(c => c.text && !isBadLlmValue(c.text) && !containsJapanese(c.text) && textCopiedFrom(c.text, text));
   const wordClasses = words.map(() => new Set());
   chunks.forEach(c => markChunkWords(words, wordClasses, c.text, classForChunk(c.kind)));
@@ -1599,6 +1606,7 @@ function isBadLlmValue(value) {
     || text.includes("sv/svc/svo/svoo/svoc + japanese explanation")
     || text.includes("要点/対比/理由・原因/結果/結論/具体例/詳細など")
     || text.includes("接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句")
+    || text.includes("接続語/疑問詞/助動詞/s 主語/v 動詞/o 目的語/c 補語/修飾句")
     || text.includes("日本語ラベル");
 }
 
@@ -1614,13 +1622,16 @@ function textCopiedFrom(needle, haystack) {
 
 function normalizeChunkKind(kind) {
   const k = String(kind || "").trim().toLowerCase();
-  if (["connector", "subject", "verb", "object", "complement", "modifier"].includes(k)) return k;
+  if (["connector", "interrogative", "auxiliary", "subject", "verb", "object", "complement", "modifier"].includes(k)) return k;
   if (!k) return "modifier";
   // Models often answer with English grammar terms ("linking verb",
-  // "direct object", "subject complement"). Fold them onto a canonical kind so
-  // the Japanese label is derived correctly. Check the more specific terms
-  // first: "subject complement" must resolve to complement, not subject.
+  // "direct object", "subject complement", "auxiliary verb"). Fold them onto a
+  // canonical kind so the Japanese label is derived correctly. Check the more
+  // specific terms first: "subject complement" must resolve to complement, not
+  // subject, and "auxiliary verb" must resolve to auxiliary, not verb.
   if (k.includes("connect") || k.includes("conjunction") || k.includes("transition")) return "connector";
+  if (k.includes("interrog") || k.includes("question word") || k.includes("wh-word") || k.includes("wh word") || k.includes("whword")) return "interrogative";
+  if (k.includes("auxiliary") || k.includes("aux") || k.includes("modal") || k.includes("operator")) return "auxiliary";
   if (k.includes("complement")) return "complement";
   if (k.includes("object")) return "object";
   if (k.includes("subject")) return "subject";
@@ -1628,15 +1639,24 @@ function normalizeChunkKind(kind) {
   return "modifier";
 }
 
-function chunkLabelForKind(kind) {
+// Wh-words that act adverbially (疑問副詞) vs. as pronouns (疑問代名詞).
+const READING_WH_ADVERBS = new Set(["when", "where", "why", "how"]);
+
+function chunkLabelForKind(kind, text = "") {
+  const k = normalizeChunkKind(kind);
+  if (k === "interrogative") {
+    const head = String(text || "").trim().toLowerCase().split(/\s+/)[0].replace(/^[.,;:!?]+|[.,;:!?]+$/g, "");
+    return READING_WH_ADVERBS.has(head) ? "疑問副詞" : "疑問代名詞";
+  }
   return {
     connector: "接続語",
+    auxiliary: "助動詞",
     subject: "S 主語",
     verb: "V 動詞",
     object: "O 目的語",
     complement: "C 補語",
     modifier: "修飾句",
-  }[normalizeChunkKind(kind)] || "修飾句";
+  }[k] || "修飾句";
 }
 
 const READING_PATTERN_LABELS = {
@@ -1663,6 +1683,8 @@ function canonicalReadingPattern(raw) {
 function classForChunk(kind) {
   return {
     connector: "rs-signal",
+    interrogative: "rs-interrog",
+    auxiliary: "rs-aux",
     subject: "rs-subject",
     verb: "rs-verb",
     object: "rs-object",
@@ -1827,7 +1849,13 @@ function firstContentIndex(lower, verbStart) {
 function classifySentencePattern(lower, verb) {
   if (verb.start < 0) return { label: "文型不明", kind: "unknown" };
   const main = verb.word;
-  const after = lower.slice(verb.end + 1).filter(w =>
+  // The S/V/O/C pattern describes only the main clause, so stop counting at the
+  // first subordinating conjunction — an adverbial clause ("when they see ...")
+  // must not turn an SV/SVC sentence into a spurious SVO/SVOC.
+  let tail = lower.slice(verb.end + 1);
+  const subAt = tail.findIndex(w => READING_SUBORDINATORS.has(w));
+  if (subAt >= 0) tail = tail.slice(0, subAt);
+  const after = tail.filter(w =>
     !READING_FUNCTION_WORDS.has(w) && !/^\d+$/.test(w));
   if (READING_LINKING.has(main)) {
     return { label: after.length ? "SVC（主語＋動詞＋補語）" : "SV（主語＋動詞）", kind: after.length ? "svc" : "sv" };
@@ -1851,9 +1879,12 @@ function readingChunks(words, lower, verb, pattern) {
   if (sText) chunks.push({ label: "S 主語", text: sText, kind: "subject" });
   if (vText) chunks.push({ label: "V 動詞", text: vText, kind: "verb" });
   if (rest.length) {
-    const prepAt = rest.findIndex((_, i) => READING_PREPOSITIONS.has(lower[verb.end + 1 + i]));
-    const mainRest = prepAt >= 0 ? rest.slice(0, prepAt) : rest;
-    const prepRest = prepAt >= 0 ? rest.slice(prepAt) : [];
+    const breakAt = rest.findIndex((_, i) => {
+      const w = lower[verb.end + 1 + i];
+      return READING_PREPOSITIONS.has(w) || READING_SUBORDINATORS.has(w);
+    });
+    const mainRest = breakAt >= 0 ? rest.slice(0, breakAt) : rest;
+    const prepRest = breakAt >= 0 ? rest.slice(breakAt) : [];
     if (mainRest.length) {
       const label = pattern.kind === "svc" ? "C 補語" : pattern.kind === "sv" ? "修飾" : "O 目的語";
       chunks.push({ label, text: mainRest.join(" "), kind: "object" });

@@ -2854,9 +2854,10 @@ def _reading_sentence_sys(level: str) -> str:
         "Use concrete values, never placeholder descriptions. "
         "Forbidden values include: 'exact original sentence', 'exact words from the sentence', "
         "'SV/SVC/SVO/SVOO/SVOC + Japanese explanation', '要点/対比/理由・原因/結果/結論/具体例/詳細など', "
-        "'接続語/S 主語/V 動詞/O 目的語/C 補語/修飾句', '日本語ラベル', and '...'. "
+        "'接続語/疑問詞/助動詞/S 主語/V 動詞/O 目的語/C 補語/修飾句', '日本語ラベル', and '...'. "
         "JSON contract: {text, pattern, focus, chunks, signals}. "
-        "Each chunk has kind, label, and text. kind must be one of connector, subject, verb, object, complement, modifier. "
+        "Each chunk has kind, label, and text. kind must be one of "
+        "connector, interrogative, auxiliary, subject, verb, object, complement, modifier. "
         "Each signal has key, label, and match. "
         "Example for 'However, the change does not help everyone in the same way.': "
         "{\"text\":\"However, the change does not help everyone in the same way.\","
@@ -2869,15 +2870,51 @@ def _reading_sentence_sys(level: str) -> str:
         "{\"kind\":\"object\",\"label\":\"O 目的語\",\"text\":\"everyone\"},"
         "{\"kind\":\"modifier\",\"label\":\"修飾句\",\"text\":\"in the same way\"}],"
         "\"signals\":[{\"key\":\"contrast\",\"label\":\"対比\",\"match\":\"However\"}]}. "
+        "Second example, a wh-question — 'Why does a small lesson show big changes later?': "
+        "{\"text\":\"Why does a small lesson show big changes later?\","
+        "\"pattern\":\"SVO（主語＋動詞＋目的語）\","
+        "\"focus\":\"詳細\","
+        "\"chunks\":["
+        "{\"kind\":\"interrogative\",\"label\":\"疑問副詞\",\"text\":\"Why\"},"
+        "{\"kind\":\"auxiliary\",\"label\":\"助動詞\",\"text\":\"does\"},"
+        "{\"kind\":\"subject\",\"label\":\"S 主語\",\"text\":\"a small lesson\"},"
+        "{\"kind\":\"verb\",\"label\":\"V 動詞\",\"text\":\"show\"},"
+        "{\"kind\":\"object\",\"label\":\"O 目的語\",\"text\":\"big changes\"},"
+        "{\"kind\":\"modifier\",\"label\":\"修飾句\",\"text\":\"later\"}],"
+        "\"signals\":[]}. "
         "Rules: copy the sentence exactly into text, in English. "
         "Chunk text and signal match must be copied exactly from the sentence, without adding words. "
-        "The chunk \"kind\" MUST be exactly one of the English keywords connector/subject/verb/object/complement/modifier "
+        "The chunk \"kind\" MUST be exactly one of the English keywords "
+        "connector/interrogative/auxiliary/subject/verb/object/complement/modifier "
         "(never grammar phrases like 'linking verb' or 'direct object'). "
-        "The \"label\", \"focus\", and signal \"label\" MUST be Japanese, exactly as in the example (接続語/S 主語/V 動詞/O 目的語/C 補語/修飾句). "
+        "The \"label\", \"focus\", and signal \"label\" MUST be Japanese. Use these exact labels: "
+        "接続語 for connector, 助動詞 for auxiliary, S 主語 for subject, V 動詞 for verb, O 目的語 for object, "
+        "C 補語 for complement, 修飾句 for modifier; for an interrogative use 疑問副詞 when the word is "
+        "when/where/why/how and 疑問代名詞 when it is who/whom/whose/what/which. "
         "The \"pattern\" MUST be one of SV/SVC/SVO/SVOO/SVOC followed by the Japanese note in parentheses, e.g. 'SVC（主語＋動詞＋補語）'; never add an English gloss. "
         "Separate sentence-opening connectors such as However/Therefore/For example from the subject. "
-        "Treat verb phrases such as 'does not help', 'can be seen', and 'has been changing' as one V chunk. "
-        "Put prepositional/adverbial phrases such as 'in the same way' in modifier chunks."
+        "Treat verb phrases such as 'does not help', 'can be seen', and 'has been changing' as one V chunk "
+        "WHEN the auxiliary sits directly in front of the main verb (an ordinary statement). "
+        "QUESTIONS: in a direct question, label the wh-word (who/whom/whose/what/which/when/where/why/how) as an "
+        "interrogative chunk, and label the operator/auxiliary that the subject splits from the main verb "
+        "(do/does/did, a form of be/have, or a modal such as can/will/should) as a SEPARATE auxiliary chunk; "
+        "never drop it and never merge it into the verb chunk. The S/V/O/C labels and the SV/SVC/SVO/SVOO/SVOC "
+        "pattern still describe the clause's normal grammatical roles (subject = the noun phrase, verb = the main "
+        "verb, object = what the verb acts on), regardless of the inverted question word order — so in "
+        "'Why does a small lesson show big changes later?' the subject is 'a small lesson', the verb is 'show', the "
+        "object is 'big changes', and the pattern is SVO. "
+        "INDIRECT (embedded) questions such as the 'why he left' in 'I wonder why he left' have NORMAL word order "
+        "(no inversion); keep the whole embedded clause '疑問詞 + subject + verb' as ONE chunk in the role it plays "
+        "in the main clause (usually the object), just like any other subordinate clause. "
+        "Put prepositional/adverbial phrases such as 'in the same way' or 'later' in modifier chunks. "
+        "CRUCIAL: when the sentence contains a subordinate (adverbial) clause opened by "
+        "when/while/because/since/if/although/though/before/after/until/unless/as, keep that "
+        "WHOLE clause (the conjunction plus its own subject and verb) as ONE SEPARATE modifier "
+        "chunk; never fold it into the subject, object, or complement. The S/V/O/C labels and the "
+        "SV/SVC/SVO/SVOO/SVOC pattern describe ONLY the main clause. "
+        "For example, in 'Many students feel nervous when they see a long English passage.' the "
+        "pattern is SVC, the complement C is only 'nervous', and 'when they see a long English "
+        "passage' is a separate modifier chunk."
     )
 
 
@@ -3139,10 +3176,11 @@ def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
         kind = _canonical_chunk_kind(str(ch.get("kind", "")))
         # The model often labels chunks in English ("subject", "linking verb").
         # Always derive the displayed label from the canonical kind so the UI
-        # shows the Japanese label, ignoring whatever the model sent.
+        # shows the Japanese label, ignoring whatever the model sent. The
+        # interrogative label also depends on the wh-word (疑問副詞/疑問代名詞).
         chunks.append({
             "kind": kind,
-            "label": _chunk_label(kind),
+            "label": _chunk_label(kind, ctext),
             "text": ctext,
         })
     pattern = _canonical_reading_pattern(str(sent.get("pattern", "")))
@@ -3196,6 +3234,7 @@ _READING_PLACEHOLDERS = {
     "sv/svc/svo/svoo/svoc + japanese explanation",
     "要点/対比/理由・原因/結果/結論/具体例/詳細など",
     "接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句",
+    "接続語/疑問詞/助動詞/s 主語/v 動詞/o 目的語/c 補語/修飾句",
     "日本語ラベル",
     "...",
 }
@@ -3214,9 +3253,23 @@ def _copied_from(needle: str, haystack: str) -> bool:
     return bool(n) and n in h
 
 
-def _chunk_label(kind: str) -> str:
+# Wh-words that act adverbially (疑問副詞) vs. as pronouns (疑問代名詞). Used to
+# pick the right Japanese label for an interrogative chunk.
+_READING_WH_ADVERBS = {"when", "where", "why", "how"}
+
+
+def _chunk_label(kind: str, text: str = "") -> str:
+    """Japanese label for a chunk kind.
+
+    For an interrogative chunk the label depends on the wh-word: adverbial
+    when/where/why/how are 疑問副詞, while who/whom/whose/what/which are 疑問代名詞.
+    """
+    if kind == "interrogative":
+        head = _norm_text(text).lower().split(" ", 1)[0].strip(".,;:!?")
+        return "疑問副詞" if head in _READING_WH_ADVERBS else "疑問代名詞"
     return {
         "connector": "接続語",
+        "auxiliary": "助動詞",
         "subject": "S 主語",
         "verb": "V 動詞",
         "object": "O 目的語",
@@ -3225,17 +3278,19 @@ def _chunk_label(kind: str) -> str:
     }.get(kind, "修飾句")
 
 
-_READING_CHUNK_KINDS = {"connector", "subject", "verb", "object", "complement", "modifier"}
+_READING_CHUNK_KINDS = {"connector", "interrogative", "auxiliary", "subject",
+                        "verb", "object", "complement", "modifier"}
 
 
 def _canonical_chunk_kind(raw: str) -> str:
-    """Map a model-supplied chunk kind to one of the six canonical kinds.
+    """Map a model-supplied chunk kind to one of the canonical kinds.
 
     Small models often ignore the contract and answer with grammatical English
     such as ``linking verb``, ``direct object`` or ``subject complement``. We
     fold those onto the canonical kind so the Japanese label is always derived
     correctly. Order matters: ``subject complement`` must resolve to complement,
-    not subject, so the more specific terms are checked first.
+    not subject, and ``auxiliary verb`` must resolve to auxiliary, not verb — so
+    the more specific terms are checked first.
     """
     k = _norm_text(raw).lower()
     if k in _READING_CHUNK_KINDS:
@@ -3244,6 +3299,11 @@ def _canonical_chunk_kind(raw: str) -> str:
         return "modifier"
     if "connect" in k or "conjunction" in k or "transition" in k:
         return "connector"
+    if ("interrog" in k or "question word" in k or "wh-word" in k
+            or "wh word" in k or "whword" in k):
+        return "interrogative"
+    if "auxiliary" in k or "aux" in k or "modal" in k or "operator" in k:
+        return "auxiliary"
     if "complement" in k:
         return "complement"
     if "object" in k:
@@ -3448,9 +3508,17 @@ _FB_AUX = {"do", "does", "did", "can", "could", "will", "would", "should",
            "may", "might", "must", "is", "are", "was", "were", "am", "be",
            "has", "have", "had"}
 _FB_NEG = {"not", "never"}
+# Interrogatives (wh-words). who/whom/whose/what/which are 疑問代名詞,
+# when/where/why/how are 疑問副詞 (the label is chosen in _chunk_label).
+_FB_WH = {"who", "whom", "whose", "what", "which", "when", "where", "why", "how"}
 _FB_PREP = {"in", "on", "at", "by", "for", "from", "with", "without", "into",
             "over", "under", "between", "through", "during", "before", "after",
-            "of", "to", "about", "around", "when", "where", "while", "because", "if"}
+            "of", "to", "about", "around"}
+# Subordinating conjunctions that open an adverbial clause. The clause they
+# introduce is kept as one modifier chunk and never absorbed into S/V/O/C, so
+# "feel nervous when they see ..." gives C="nervous" + a separate "when ..." modifier.
+_FB_SUBORDINATORS = {"when", "where", "while", "because", "if", "although",
+                     "though", "since", "as", "until", "unless", "whereas"}
 _FB_LINKING = {"feel", "feels", "felt", "is", "are", "was", "were", "am",
                "be", "become", "becomes", "became", "seem", "seems"}
 
@@ -3469,24 +3537,64 @@ def _fallback_sentence_analysis(sentence: str, pi: int, si: int) -> dict[str, An
             signals,
         )
         start = 1
+    is_question = sentence.strip().endswith("?")
+    # A direct question may open with an interrogative (wh-word). Pull it out as
+    # its own chunk so it is never mislabelled as the subject; the wh-word is
+    # excluded from the S/V/O search that follows.
+    wh_idx = -1
+    if is_question and start < len(lower) and lower[start] in _FB_WH:
+        wh_idx = start
+        start += 1
     verb_start, verb_end = _fallback_find_verb(lower, start)
     if verb_start < 0:
+        if wh_idx >= 0:
+            chunks.append({"kind": "interrogative",
+                           "label": _chunk_label("interrogative", words[wh_idx]),
+                           "text": words[wh_idx]})
+        rest = " ".join(words[start:]).strip()
+        if rest:
+            chunks.append({"kind": "modifier", "label": "文", "text": rest})
         return {
             "text": sentence, "pattern": "文型不明", "focus": "詳細",
             "chunks": chunks or [{"kind": "modifier", "label": "文", "text": " ".join(words)}],
             "signals": signals,
         }
-    subject = " ".join(words[start:verb_start]).strip()
+    # Subject-operator inversion in a question (e.g. "(Why) does a lesson show…"):
+    # the first verb found is an operator/auxiliary sitting in FRONT of the
+    # subject, with the real main verb after it. Split the operator into its own
+    # auxiliary chunk and let the subject/verb keep their normal grammatical roles.
+    subj_start = start
+    aux_words: list[str] = []
+    if is_question and lower[verb_start] in _FB_AUX:
+        nv_start, nv_end = _fallback_find_verb(lower, verb_end + 1)
+        if nv_start > verb_end:
+            aux_words = words[verb_start:verb_end + 1]
+            subj_start = verb_end + 1
+            verb_start, verb_end = nv_start, nv_end
+    subject = " ".join(words[subj_start:verb_start]).strip()
     verb = " ".join(words[verb_start:verb_end + 1]).strip()
     rest_words = words[verb_end + 1:]
     rest_lower = lower[verb_end + 1:]
+    if wh_idx >= 0:
+        chunks.append({"kind": "interrogative",
+                       "label": _chunk_label("interrogative", words[wh_idx]),
+                       "text": words[wh_idx]})
+    if aux_words:
+        chunks.append({"kind": "auxiliary", "label": "助動詞", "text": " ".join(aux_words)})
     if subject:
         chunks.append({"kind": "subject", "label": "S 主語", "text": subject})
     if verb:
         chunks.append({"kind": "verb", "label": "V 動詞", "text": verb})
-    prep_at = next((i for i, w in enumerate(rest_lower) if w in _FB_PREP), -1)
-    main_rest = rest_words[:prep_at] if prep_at >= 0 else rest_words
-    prep_rest = rest_words[prep_at:] if prep_at >= 0 else []
+    # Cut the post-verb span at the first preposition OR subordinating
+    # conjunction so an adverbial clause/phrase ("when they see ...", "in the
+    # same way") becomes its own modifier chunk instead of being swallowed into
+    # the object/complement of the main clause.
+    break_at = next(
+        (i for i, w in enumerate(rest_lower) if w in _FB_PREP or w in _FB_SUBORDINATORS),
+        -1,
+    )
+    main_rest = rest_words[:break_at] if break_at >= 0 else rest_words
+    prep_rest = rest_words[break_at:] if break_at >= 0 else []
     main_kind = "complement" if lower[verb_end] in _FB_LINKING else "object"
     if main_rest:
         chunks.append({"kind": main_kind, "label": _chunk_label(main_kind), "text": " ".join(main_rest)})
