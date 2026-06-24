@@ -1151,7 +1151,7 @@ routes.reading = async () => {
       この機能は<b>α版（試験運用中）</b>です。解析や長文生成の精度は利用中のAIモデルの性能に依存し、
       文構造や段落の判定が安定しないことがあります。結果はあくまで学習の参考としてご利用ください。
     </div>
-    <p class="sub">英文を入力するか、AIで長文を生成すると、文構造・5文型・段落の役割・重要シグナルを色分けして読めます。</p>
+    <p class="sub">英文を入力するか、AIで長文を生成すると、段落単位で文分割・5文型・スラッシュ読み・句/節/熟語/ディスコースマーカーを確認できます。</p>
 
     <div class="reading-layout">
       <section class="reading-input">
@@ -1256,7 +1256,8 @@ async function analyzeReadingWithAi(text) {
       return;
     }
     if (r.analysis) {
-      renderReadingAnalysis(text, normalizeLlmReadingAnalysis(r.analysis, text), r.note || "AI解析を表示しています。");
+      const kind = /簡易解析|崩れた/.test(r.note || "") ? "warn" : "ok";
+      renderReadingAnalysis(text, normalizeLlmReadingAnalysis(r.analysis, text), r.note || "AI解析を表示しています。", kind);
       note.textContent = r.note || "AI解析を表示しています。";
       return;
     }
@@ -1449,6 +1450,8 @@ function renderReadingAnalysis(text, analysis = null, modeNote = "", noteKind = 
     return;
   }
   const a = analysis || analyzeReading(text);
+  const isSimple = !analysis || Boolean(a.simple);
+  const partialSimple = !isSimple && Boolean(a.partialSimple);
   const signalHtml = a.signals.length
     ? a.signals.slice(0, 20).map(s => `<span class="signal-chip ${s.key}">${esc(s.label)}: ${esc(s.match)}</span>`).join("")
     : `<span class="muted">接続語・指示語は少なめです。</span>`;
@@ -1461,6 +1464,8 @@ function renderReadingAnalysis(text, analysis = null, modeNote = "", noteKind = 
     </div>`).join("");
 
   result.innerHTML = `
+    ${isSimple ? `<div class="simple-analysis-banner"><b>簡易解析モード</b><span>AIによる段落解析ではありません。文分割・文型・区切りはローカル規則による推定のため、句/節/熟語の詳細抽出は省略されています。</span></div>` : ""}
+    ${partialSimple ? `<div class="simple-analysis-banner partial"><b>一部は簡易解析</b><span>AI解析が崩れた段落だけ、ローカル規則による推定で補っています。</span></div>` : ""}
     ${modeNote ? `<div class="notice ${noteKind === "warn" ? "warn" : "ok"}">${esc(modeNote)}</div>` : ""}
     <div class="reading-metrics">
       <div><b>${a.paragraphs.length}</b><span>段落</span></div>
@@ -1499,14 +1504,22 @@ function normalizeLlmReadingAnalysis(analysis, sourceText) {
       role: p.role || "展開・補足",
       reason: p.reason || "AIが段落の役割を推定しました。",
       sentences,
+      signals: (p.signals || []).map(sig => normalizeLlmSignal(sig, sourceText)).filter(Boolean),
+      simple: Boolean(p.simple),
     };
   }).filter(p => p.sentences.length);
   const sentences = paragraphs.flatMap(p => p.sentences);
   const aiSignals = (analysis.signals || []).map(sig => normalizeLlmSignal(sig, sourceText)).filter(Boolean);
   const localSignals = analyzeReading(sourceText).signals;
-  const signals = mergeReadingSignals(aiSignals, sentences.flatMap(s => s.signals), localSignals);
+  const signals = mergeReadingSignals(aiSignals, paragraphs.flatMap(p => p.signals), sentences.flatMap(s => s.signals), localSignals);
   if (!paragraphs.length) return analyzeReading(sourceText);
-  return { paragraphs, sentences, signals };
+  return {
+    paragraphs,
+    sentences,
+    signals,
+    simple: Boolean(analysis.simple) || paragraphs.every(p => p.simple),
+    partialSimple: Boolean(analysis.partial_simple) || paragraphs.some(p => p.simple),
+  };
 }
 
 function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
@@ -1523,6 +1536,8 @@ function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
     // label also depends on the wh-word (疑問副詞/疑問代名詞).
     return { kind, label: chunkLabelForKind(kind, ctext), text: ctext };
   }).filter(c => c.text && !isBadLlmValue(c.text) && !containsJapanese(c.text) && textCopiedFrom(c.text, text));
+  const slashSegments = normalizeSlashSegments(s.slash || s.slash_reading || s.slash_segments, text, chunks);
+  const features = normalizeReadingFeatures(s.features || s.phrases || s.structures, text, slashSegments);
   const wordClasses = words.map(() => new Set());
   chunks.forEach(c => markChunkWords(words, wordClasses, c.text, classForChunk(c.kind)));
   signals.forEach(sig => markChunkWords(words, wordClasses, sig.match, "rs-signal"));
@@ -1535,9 +1550,80 @@ function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
     pattern: canonicalReadingPattern(s.pattern),
     focus: (isBadLlmValue(s.focus) || !containsJapanese(s.focus)) ? "詳細" : (s.focus || "詳細"),
     chunks,
+    slashSegments,
+    features,
     signals,
     wordClasses,
   };
+}
+
+function normalizeSlashSegments(items, context, chunks = []) {
+  const raw = Array.isArray(items) ? items : [];
+  const segments = [];
+  raw.forEach(item => {
+    const text = String((item && typeof item === "object") ? (item.text || item.segment || "") : (item || "")).trim();
+    if (!text || isBadLlmValue(text) || containsJapanese(text) || !textCopiedFrom(text, context)) return;
+    if (!segments.some(s => s.toLowerCase() === text.toLowerCase())) segments.push(text);
+  });
+  if (segments.length) return segments;
+  return (chunks || []).map(c => c.text).filter(Boolean);
+}
+
+const READING_FEATURE_LABELS = {
+  noun_phrase: "名詞句",
+  adverb_phrase: "副詞句",
+  adjective_phrase: "形容詞句",
+  noun_clause: "名詞節",
+  adverb_clause: "副詞節",
+  adjective_clause: "形容詞節",
+  idiom: "熟語・慣用句",
+  discourse_marker: "ディスコースマーカー",
+};
+
+function normalizeFeatureType(raw) {
+  const k = String(raw || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
+  if (READING_FEATURE_LABELS[k]) return k;
+  if (k.includes("discourse") || k.includes("marker") || k.includes("transition")) return "discourse_marker";
+  if (k.includes("idiom") || k.includes("set_expression") || k.includes("fixed_expression")) return "idiom";
+  if (k.includes("noun") && k.includes("clause")) return "noun_clause";
+  if ((k.includes("adverb") || k.includes("adverbial")) && k.includes("clause")) return "adverb_clause";
+  if ((k.includes("adjective") || k.includes("relative")) && k.includes("clause")) return "adjective_clause";
+  if (k.includes("noun")) return "noun_phrase";
+  if (k.includes("adverb") || k.includes("adverbial")) return "adverb_phrase";
+  if (k.includes("adjective")) return "adjective_phrase";
+  return "idiom";
+}
+
+function featureLabel(type, label = "") {
+  const text = String(label || "").trim();
+  if (text && !isBadLlmValue(text) && containsJapanese(text)) return text;
+  return READING_FEATURE_LABELS[type] || "熟語・慣用句";
+}
+
+function normalizeReadingFeatures(items, context, slashSegments = []) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  return items.map(item => {
+    if (!item || typeof item !== "object") return null;
+    const text = String(item.text || item.match || "").trim();
+    if (!text || isBadLlmValue(text) || containsJapanese(text) || !textCopiedFrom(text, context)) return null;
+    const type = normalizeFeatureType(item.type || item.kind);
+    const id = `${type}:${text.toLowerCase()}`;
+    if (seen.has(id)) return null;
+    seen.add(id);
+    let relatesTo = String(item.relates_to || item.segment || item.slash || "").trim();
+    if (!slashSegments.some(s => s.toLowerCase() === relatesTo.toLowerCase())) {
+      relatesTo = slashSegments.find(s => textCopiedFrom(text, s) || textCopiedFrom(s, text)) || "";
+    }
+    const note = String(item.note || item.role || "").trim();
+    return {
+      type,
+      label: featureLabel(type, item.label),
+      text,
+      relatesTo,
+      note: (note && !isBadLlmValue(note) && containsJapanese(note)) ? note : "",
+    };
+  }).filter(Boolean);
 }
 
 function normalizeLlmSignal(sig, context = "") {
@@ -1603,6 +1689,8 @@ function isBadLlmValue(value) {
   return text === "..." || text.includes("exact original sentence")
     || text.includes("exact words from the sentence")
     || text.includes("exact signal word or phrase")
+    || text.includes("exact slash segment")
+    || text.includes("exact phrase or clause")
     || text.includes("sv/svc/svo/svoo/svoc + japanese explanation")
     || text.includes("要点/対比/理由・原因/結果/結論/具体例/詳細など")
     || text.includes("接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句")
@@ -1711,9 +1799,20 @@ function markChunkWords(words, wordClasses, phrase, cls) {
 }
 
 function renderReadingSentence(s) {
-  const chunks = s.chunks.map(c =>
+  const chunks = (s.chunks || []).map(c =>
     `<span class="chunk ${c.kind}"><b>${esc(c.label)}</b>${esc(c.text)}</span>`).join("");
   const focus = s.focus ? `<span class="focus">${esc(s.focus)}</span>` : "";
+  const slash = (s.slashSegments || []).length
+    ? `<div class="slash-row">${s.slashSegments.map(seg => `<span>${esc(seg)}</span>`).join("")}</div>`
+    : "";
+  const features = (s.features || []).length
+    ? `<div class="feature-row">${s.features.map(f => `
+        <span class="feature-chip ${esc(f.type)}">
+          <b>${esc(f.label)}</b>${esc(f.text)}
+          ${f.relatesTo ? `<em>→ ${esc(f.relatesTo)}</em>` : ""}
+          ${f.note ? `<small>${esc(f.note)}</small>` : ""}
+        </span>`).join("")}</div>`
+    : "";
   return `
     <div class="reading-sentence">
       <div class="sentence-meta">
@@ -1722,7 +1821,9 @@ function renderReadingSentence(s) {
         <button class="mini" data-readsay="${esc(s.text)}">🔊</button>
       </div>
       <div class="reading-line">${renderReadingTokens(s)}</div>
+      ${slash}
       <div class="chunk-row">${chunks}</div>
+      ${features}
     </div>`;
 }
 
@@ -1809,6 +1910,8 @@ function analyzeReadingSentence(text, paragraphIndex, sentenceIndex) {
     pattern: pattern.label,
     focus: sentenceFocus(signals, sentenceIndex),
     chunks: readingChunks(words, lower, verb, pattern),
+    slashSegments: [],
+    features: [],
     signals,
     wordClasses: classes,
   };

@@ -97,7 +97,7 @@ AUTOLOAD_MODEL = os.getenv("VIVE_AUTOLOAD_MODEL", "1") not in ("0", "false", "Fa
 AI_TIMEOUT = float(os.getenv("VIVE_AI_TIMEOUT", "60"))
 
 # --- Reading analysis (high-capability LLM gate) ---------------------------
-# Sentence-by-sentence reading analysis needs a capable model: small local
+# Paragraph-by-paragraph reading analysis needs a capable model: small local
 # models (e.g. a 2B Foundry Local CPU model) mislabel structure or stall on the
 # JSON contract, so they are restricted to the rule-based simple analysis.
 # Hosted providers (ChatGPT/Azure/OpenAI-compatible) are always allowed.
@@ -109,9 +109,9 @@ READING_MIN_LOCAL_PARAMS_B = float(os.getenv("VIVE_READING_MIN_PARAMS_B", "7"))
 READING_FORCE_AI = os.getenv("VIVE_READING_FORCE_AI", "0") not in ("0", "false", "False")
 # Force-disable reading AI analysis (always use the simple rule-based analysis).
 READING_DISABLE_AI = os.getenv("VIVE_READING_DISABLE_AI", "0") not in ("0", "false", "False")
-# Log each sentence that falls back to the simple analysis (and why) to
+# Log each paragraph that falls back to the simple analysis (and why) to
 # DATA_DIR/reading_debug.log. Use this to diagnose why AI analysis "broke" for
-# some sentences (no response / invalid JSON / failed validation). Off by default.
+# some paragraphs (no response / invalid JSON / failed validation). Off by default.
 READING_DEBUG = os.getenv("VIVE_READING_DEBUG", "0") not in ("0", "false", "False")
 
 APP_NAME = "ViveEnglish"

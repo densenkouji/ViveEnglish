@@ -2770,13 +2770,12 @@ def _fallback_reading_passage(topic: str, length: str = "long") -> dict[str, str
     return {"title": title, "passage": passage, "passage_ja": passage_ja}
 
 
-# --- Reading analysis (sentence-by-sentence) -------------------------------
-# Small local models break down when asked to emit one giant JSON object for a
-# whole passage: the output is truncated or malformed once the text is long.
-# So we split the passage into paragraphs/sentences ourselves and ask the model
-# to analyse ONE sentence per call, returning a tiny JSON object. Any sentence
-# the model fails on falls back to the rule-based analyser individually, so a
-# single bad sentence never wrecks the whole passage.
+# --- Reading analysis (paragraph-by-paragraph) ------------------------------
+# Whole-passage JSON is easy to truncate, while sentence-by-sentence calls lose
+# paragraph context. We split only on paragraph boundaries and ask the model to
+# cut sentences, classify sentence patterns, produce slash-reading segments,
+# and extract phrases/clauses/idioms/markers inside each paragraph. Any
+# paragraph the model fails on falls back to the rule-based analyser.
 #
 # Reading analysis is gated to capable models only: small local models (a 2B
 # Foundry Local CPU model, say) mislabel sentence structure, leak English
@@ -2845,22 +2844,35 @@ def _reading_ai_gate() -> tuple[bool, str]:
     return False, note
 
 
-def _reading_sentence_sys(level: str) -> str:
+def _reading_paragraph_sys(level: str) -> str:
     return (
         "You are an expert English reading coach for Japanese learners. "
-        f"Analyse ONE English sentence for a {level} learner. "
+        f"Analyse ONE English paragraph for a {level} learner. "
         f"Pitch the explanation to this level — {_level_guide(level)} "
-        "Do NOT translate it. Return ONLY a compact JSON object for this single sentence. "
+        "Do NOT translate it. Return ONLY a compact JSON object for this single paragraph. "
         "Use concrete values, never placeholder descriptions. "
         "Forbidden values include: 'exact original sentence', 'exact words from the sentence', "
+        "'exact slash segment', 'exact phrase or clause', "
         "'SV/SVC/SVO/SVOO/SVOC + Japanese explanation', '要点/対比/理由・原因/結果/結論/具体例/詳細など', "
         "'接続語/疑問詞/助動詞/S 主語/V 動詞/O 目的語/C 補語/修飾句', '日本語ラベル', and '...'. "
-        "JSON contract: {text, pattern, focus, chunks, signals}. "
+        "JSON contract: {role, reason, sentences, signals}. "
+        "role and reason are Japanese paragraph-role labels/explanations. "
+        "Split the paragraph into sentences yourself; do not rely on the caller to split it. "
+        "Each sentence has {text, pattern, focus, chunks, slash, features, signals}. "
         "Each chunk has kind, label, and text. kind must be one of "
         "connector, interrogative, auxiliary, subject, verb, object, complement, modifier. "
+        "slash is an array of exact English sentence segments for slash reading; every segment "
+        "must be copied from the sentence in order, without adding words. "
+        "features is an array of phrase/clause/idiom/marker objects with {type,label,text,relates_to,note}. "
+        "type must be exactly one of noun_phrase, adverb_phrase, adjective_phrase, noun_clause, "
+        "adverb_clause, adjective_clause, idiom, discourse_marker. label and note must be Japanese. "
+        "text must be copied exactly from the sentence. relates_to must be one exact slash segment "
+        "that the feature belongs to. Extract important noun/adverb/adjective phrases, "
+        "noun/adverb/adjective clauses, idioms, set expressions, and discourse markers. "
         "Each signal has key, label, and match. "
         "Example for 'However, the change does not help everyone in the same way.': "
-        "{\"text\":\"However, the change does not help everyone in the same way.\","
+        "{\"role\":\"展開・補足\",\"reason\":\"対比を使って内容を広げています。\","
+        "\"sentences\":[{\"text\":\"However, the change does not help everyone in the same way.\","
         "\"pattern\":\"SVO（主語＋動詞＋目的語）\","
         "\"focus\":\"対比\","
         "\"chunks\":["
@@ -2869,6 +2881,12 @@ def _reading_sentence_sys(level: str) -> str:
         "{\"kind\":\"verb\",\"label\":\"V 動詞\",\"text\":\"does not help\"},"
         "{\"kind\":\"object\",\"label\":\"O 目的語\",\"text\":\"everyone\"},"
         "{\"kind\":\"modifier\",\"label\":\"修飾句\",\"text\":\"in the same way\"}],"
+        "\"slash\":[\"However\",\"the change does not help everyone\",\"in the same way\"],"
+        "\"features\":["
+        "{\"type\":\"discourse_marker\",\"label\":\"ディスコースマーカー\",\"text\":\"However\",\"relates_to\":\"However\",\"note\":\"対比を示す\"},"
+        "{\"type\":\"noun_phrase\",\"label\":\"名詞句\",\"text\":\"the change\",\"relates_to\":\"the change does not help everyone\",\"note\":\"主語\"},"
+        "{\"type\":\"adverb_phrase\",\"label\":\"副詞句\",\"text\":\"in the same way\",\"relates_to\":\"in the same way\",\"note\":\"方法を表す\"}],"
+        "\"signals\":[{\"key\":\"contrast\",\"label\":\"対比\",\"match\":\"However\"}]}],"
         "\"signals\":[{\"key\":\"contrast\",\"label\":\"対比\",\"match\":\"However\"}]}. "
         "Second example, a wh-question — 'Why does a small lesson show big changes later?': "
         "{\"text\":\"Why does a small lesson show big changes later?\","
@@ -2881,8 +2899,13 @@ def _reading_sentence_sys(level: str) -> str:
         "{\"kind\":\"verb\",\"label\":\"V 動詞\",\"text\":\"show\"},"
         "{\"kind\":\"object\",\"label\":\"O 目的語\",\"text\":\"big changes\"},"
         "{\"kind\":\"modifier\",\"label\":\"修飾句\",\"text\":\"later\"}],"
+        "\"slash\":[\"Why\",\"does a small lesson show big changes\",\"later\"],"
+        "\"features\":["
+        "{\"type\":\"noun_phrase\",\"label\":\"名詞句\",\"text\":\"a small lesson\",\"relates_to\":\"does a small lesson show big changes\",\"note\":\"主語\"},"
+        "{\"type\":\"noun_phrase\",\"label\":\"名詞句\",\"text\":\"big changes\",\"relates_to\":\"does a small lesson show big changes\",\"note\":\"目的語\"}],"
         "\"signals\":[]}. "
-        "Rules: copy the sentence exactly into text, in English. "
+        "Rules: copy each sentence exactly into text, in English. "
+        "The concatenated sentence texts must cover the paragraph in the original order. "
         "Chunk text and signal match must be copied exactly from the sentence, without adding words. "
         "The chunk \"kind\" MUST be exactly one of the English keywords "
         "connector/interrogative/auxiliary/subject/verb/object/complement/modifier "
@@ -2914,8 +2937,14 @@ def _reading_sentence_sys(level: str) -> str:
         "SV/SVC/SVO/SVOO/SVOC pattern describe ONLY the main clause. "
         "For example, in 'Many students feel nervous when they see a long English passage.' the "
         "pattern is SVC, the complement C is only 'nervous', and 'when they see a long English "
-        "passage' is a separate modifier chunk."
+        "passage' is a separate modifier chunk and an adverb_clause feature."
     )
+
+
+def _reading_paragraph_texts(text: str) -> list[str]:
+    """Split only into paragraphs; sentence splitting is delegated to the LLM."""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    return paragraphs or ([text.strip()] if text.strip() else [])
 
 
 def _reading_paragraph_units(text: str) -> list[list[str]]:
@@ -2942,7 +2971,7 @@ _READING_DEBUG_REASONS = {
 
 
 def _reading_debug_log(pi: int, si: int, sentence: str, reason: str, raw: Any) -> None:
-    """Record a sentence that fell back to the simple analysis, and why.
+    """Record a paragraph/sentence that fell back to simple analysis, and why.
 
     Written to ``DATA_DIR/reading_debug.log`` only when ``VIVE_READING_DEBUG`` is
     on, so the default run produces no extra I/O. Best-effort: never let logging
@@ -2957,9 +2986,11 @@ def _reading_debug_log(pi: int, si: int, sentence: str, reason: str, raw: Any) -
             snippet = snippet[:1000] + "…(truncated)"
         # For these the detail is the failure cause/status note, not raw output.
         detail_label = "cause" if reason in ("no_response", "empty_response", "exception") else "raw"
+        unit = f"paragraph {pi}" if si < 0 else f"paragraph {pi} sentence {si}"
+        text_label = "paragraph" if si < 0 else "sentence"
         line = (
-            f"--- paragraph {pi} sentence {si} | {reason} ({label})\n"
-            f"sentence: {sentence}\n"
+            f"--- {unit} | {reason} ({label})\n"
+            f"{text_label}: {sentence}\n"
             f"{detail_label}: {snippet}\n\n"
         )
         with open(config.DATA_DIR / "reading_debug.log", "a", encoding="utf-8") as fh:
@@ -2970,10 +3001,10 @@ def _reading_debug_log(pi: int, si: int, sentence: str, reason: str, raw: Any) -
 
 def _reading_note(any_usable: bool, any_fallback: bool) -> str:
     if any_usable and any_fallback:
-        return "一部の文はAI解析が崩れたため簡易解析で補いました。"
+        return "一部の段落はAI解析が崩れたため簡易解析で補いました。"
     if any_usable:
         return "AI解析を表示しています。"
-    # AI was reachable but produced nothing usable for any sentence.
+    # AI was reachable but produced nothing usable for any paragraph.
     return "AI解析の形式が崩れたため、簡易解析を表示しています。"
 
 
@@ -2987,31 +3018,47 @@ def _reading_role(pi: int, total: int) -> str:
     return "展開・補足"
 
 
-def _analyze_reading_sentence(sentence: str, level: str, pi: int, si: int) -> tuple[dict[str, Any], bool, bool]:
-    """Analyse a single sentence via the model, falling back to rules.
+def _fallback_reading_paragraph(para_text: str, pi: int, total: int, note: str = "") -> dict[str, Any]:
+    sentences = []
+    signals = []
+    for si, sentence in enumerate(_reading_sentence_split(para_text)):
+        item = _fallback_sentence_analysis(sentence, pi, si)
+        sentences.append(item)
+        signals.extend(item["signals"])
+    return {
+        "index": pi,
+        "role": _reading_role(pi, total),
+        "reason": note or "AI出力が崩れたため、語順と接続語から推定しました。",
+        "sentences": sentences,
+        "signals": signals,
+        "simple": True,
+    }
 
-    Returns ``(sentence_analysis, usable, responded)`` where ``usable`` is True
-    only when the model produced a valid result for this sentence, and
-    ``responded`` is True whenever the model replied at all (i.e. the AI is
-    reachable, even if its output was unusable). Keeping the two apart lets the
-    caller tell "could not connect" from "connected but output was malformed".
+
+def _analyze_reading_paragraph(para_text: str, level: str, pi: int, total: int) -> tuple[dict[str, Any], bool, bool]:
+    """Analyse a paragraph via the model, falling back to the existing rules.
+
+    Returns ``(paragraph_analysis, usable, responded)`` where ``usable`` is True
+    only when the model produced a valid paragraph result, and ``responded`` is
+    True whenever the model replied at all. The model is responsible for cutting
+    the paragraph into sentences.
     """
     raw = _chat(
-        [{"role": "system", "content": _reading_sentence_sys(level)},
-         {"role": "user", "content": sentence}],
-        temperature=0.1, max_tokens=600, json_mode=True,
+        [{"role": "system", "content": _reading_paragraph_sys(level)},
+         {"role": "user", "content": para_text}],
+        temperature=0.1, max_tokens=2200, json_mode=True,
         model=(_translate_model or config.TRANSLATE_MODEL or None),
     )
     responded = bool(raw)
     if raw:
         parsed = _safe_json(raw)
         if parsed:
-            item = _clean_reading_sentence(parsed, sentence)
-            if item:
-                return item, True, True
-            _reading_debug_log(pi, si, sentence, "validation_failed", raw)
+            paragraph = _clean_reading_paragraph(parsed, para_text, pi, total)
+            if paragraph:
+                return paragraph, True, True
+            _reading_debug_log(pi, -1, para_text, "validation_failed", raw)
         else:
-            _reading_debug_log(pi, si, sentence, "invalid_json", raw)
+            _reading_debug_log(pi, -1, para_text, "invalid_json", raw)
     else:
         # _chat() stashes the cause in _status["note"]: "call failed: ..." for a
         # real exception, or "empty response ..." when the model returned no
@@ -3019,22 +3066,23 @@ def _analyze_reading_sentence(sentence: str, level: str, pi: int, si: int) -> tu
         # empty JSON-mode reply (the common small-model failure here).
         note = _status.get("note") or ""
         kind = "empty_response" if note.startswith("empty response") else "no_response"
-        _reading_debug_log(pi, si, sentence, kind, note)
-    return _fallback_sentence_analysis(sentence, pi, si), False, responded
+        _reading_debug_log(pi, -1, para_text, kind, note)
+    return _fallback_reading_paragraph(para_text, pi, total), False, responded
 
 
 def analyze_reading_text(text: str, level: str = "beginner") -> dict[str, Any]:
     """Analyse a passage into paragraph roles, sentence patterns, and chunks.
 
-    Each sentence is analysed in its own small model call so that long passages
-    do not overwhelm small local models.
+    AI mode analyses one paragraph per model call; sentence cutting, slash
+    reading segments, and phrase/clause extraction are delegated to the model.
+    The no-AI fallback keeps the existing rule-based sentence splitting.
     """
     text = str(text or "").strip()
     if not text:
         return {"online": False, "analysis": None, "note": "解析する英文を入力してください。"}
 
-    units = _reading_paragraph_units(text)
-    if not units:
+    paragraph_texts = _reading_paragraph_texts(text)
+    if not paragraph_texts:
         return {"online": False, "analysis": None, "note": "解析する英文を入力してください。"}
 
     # Reading analysis is reserved for capable models; small local models fall
@@ -3050,38 +3098,36 @@ def analyze_reading_text(text: str, level: str = "beginner") -> dict[str, Any]:
     any_usable = False
     any_fallback = False
     any_responded = False
-    total = len(units)
-    for pi, sentences in enumerate(units):
-        items = []
-        for si, sentence in enumerate(sentences):
-            item, usable, responded = _analyze_reading_sentence(sentence, level, pi, si)
-            any_usable = any_usable or usable
-            any_fallback = any_fallback or (not usable)
-            any_responded = any_responded or responded
-            all_signals.extend(item["signals"])
-            items.append(item)
-        paragraphs.append({
-            "index": pi,
-            "role": _reading_role(pi, total),
-            "reason": "段落の位置から役割を推定しました。",
-            "sentences": items,
-        })
+    total = len(paragraph_texts)
+    for pi, para_text in enumerate(paragraph_texts):
+        paragraph, usable, responded = _analyze_reading_paragraph(para_text, level, pi, total)
+        any_usable = any_usable or usable
+        any_fallback = any_fallback or (not usable)
+        any_responded = any_responded or responded
+        all_signals.extend(paragraph.get("signals") or [])
+        paragraphs.append(paragraph)
 
-    # The AI was never reachable for any sentence -> truly offline.
+    # The AI was never reachable for any paragraph -> truly offline.
     if not any_responded:
         fallback = _fallback_reading_analysis(
             text, "AI解析に接続できなかったため、簡易解析を表示しています。")
         return {"online": False, "analysis": fallback, "note": fallback["note"]}
 
     note = _reading_note(any_usable, any_fallback)
-    analysis = {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+    analysis = {
+        "paragraphs": paragraphs,
+        "signals": all_signals,
+        "note": note,
+        "simple": any_fallback and not any_usable,
+        "partial_simple": any_fallback and any_usable,
+    }
     return {"online": True, "analysis": analysis, "note": note}
 
 
 def analyze_reading_text_stream(text: str, level: str = "beginner"):
-    """Stream a sentence-by-sentence reading analysis as NDJSON events.
+    """Stream a paragraph-by-paragraph reading analysis as NDJSON events.
 
-    Emits a ``delta`` per analysed sentence (so the UI shows progress) and a
+    Emits a ``delta`` per analysed paragraph (so the UI shows progress) and a
     single ``final`` event with the assembled analysis, matching the existing
     stream contract.
     """
@@ -3092,7 +3138,7 @@ def analyze_reading_text_stream(text: str, level: str = "beginner"):
 
     def gen():
         yield _stream_event("start", status=status())
-        units = _reading_paragraph_units(text)
+        paragraph_texts = _reading_paragraph_texts(text)
         # Gate AI analysis to capable models; otherwise emit the simple analysis.
         allowed, gate_note = _reading_ai_gate()
         if not allowed:
@@ -3100,39 +3146,30 @@ def analyze_reading_text_stream(text: str, level: str = "beginner"):
             yield _stream_event("final", result={"online": False, "restricted": True,
                                                   "analysis": fallback, "note": gate_note})
             return
-        total_sentences = sum(len(s) for s in units)
         paragraphs = []
         all_signals = []
         any_usable = False
         any_fallback = False
         any_responded = False
-        total = len(units)
+        total = len(paragraph_texts)
         done = 0
-        for pi, sentences in enumerate(units):
-            items = []
-            for si, sentence in enumerate(sentences):
-                try:
-                    item, usable, responded = _analyze_reading_sentence(sentence, level, pi, si)
-                except Exception as exc:
-                    _reading_debug_log(pi, si, sentence, "exception", repr(exc))
-                    yield _stream_event("error", note=f"文の解析に失敗しました: {exc}")
-                    item, usable, responded = _fallback_sentence_analysis(sentence, pi, si), False, False
-                any_usable = any_usable or usable
-                any_fallback = any_fallback or (not usable)
-                any_responded = any_responded or responded
-                all_signals.extend(item["signals"])
-                items.append(item)
-                done += 1
-                yield _stream_event("delta",
-                                    text=f"[{done}/{total_sentences}] {item['text']}\n")
-            paragraphs.append({
-                "index": pi,
-                "role": _reading_role(pi, total),
-                "reason": "段落の位置から役割を推定しました。",
-                "sentences": items,
-            })
+        for pi, para_text in enumerate(paragraph_texts):
+            try:
+                paragraph, usable, responded = _analyze_reading_paragraph(para_text, level, pi, total)
+            except Exception as exc:
+                _reading_debug_log(pi, -1, para_text, "exception", repr(exc))
+                yield _stream_event("error", note=f"段落の解析に失敗しました: {exc}")
+                paragraph, usable, responded = _fallback_reading_paragraph(para_text, pi, total), False, False
+            any_usable = any_usable or usable
+            any_fallback = any_fallback or (not usable)
+            any_responded = any_responded or responded
+            all_signals.extend(paragraph.get("signals") or [])
+            paragraphs.append(paragraph)
+            done += 1
+            yield _stream_event("delta",
+                                text=f"[{done}/{total}] Paragraph {pi + 1}: {len(paragraph.get('sentences') or [])}文\n")
 
-        # The AI was never reachable for any sentence -> truly offline.
+        # The AI was never reachable for any paragraph -> truly offline.
         if not any_responded:
             fallback = _fallback_reading_analysis(
                 text, "AI解析に接続できなかったため、簡易解析を表示しています。")
@@ -3140,13 +3177,61 @@ def analyze_reading_text_stream(text: str, level: str = "beginner"):
                                                   "note": fallback["note"]})
             return
         note = _reading_note(any_usable, any_fallback)
-        analysis = {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+        analysis = {
+            "paragraphs": paragraphs,
+            "signals": all_signals,
+            "note": note,
+            "simple": any_fallback and not any_usable,
+            "partial_simple": any_fallback and any_usable,
+        }
         yield _stream_event("final", result={"online": True, "analysis": analysis, "note": note})
 
     return gen()
 
 
-def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
+def _clean_reading_paragraph(value: Any, source: str, pi: int, total: int) -> dict[str, Any] | None:
+    """Validate and normalise one AI-produced paragraph object."""
+    if isinstance(value, dict) and isinstance(value.get("paragraph"), dict):
+        value = value["paragraph"]
+    if not isinstance(value, dict):
+        return None
+
+    sentences = []
+    for si, sent in enumerate(value.get("sentences") or []):
+        item = _clean_reading_sentence(sent, source, fallback_to_source=False)
+        if item:
+            item["paragraph_index"] = pi
+            item["sentence_index"] = si
+            sentences.append(item)
+    if not sentences:
+        return None
+
+    role = str(value.get("role") or "").strip()
+    if _bad_reading_value(role) or not _JP_CHARS.search(role):
+        role = _reading_role(pi, total)
+    reason = str(value.get("reason") or "").strip()
+    if _bad_reading_value(reason) or not _JP_CHARS.search(reason):
+        reason = "AIが段落全体から役割を推定しました。"
+    para_signals = _merge_reading_signals(
+        _clean_reading_signals(value.get("signals") or [], context=source),
+        *(s.get("signals") or [] for s in sentences),
+    )
+    return {
+        "index": pi,
+        "role": role,
+        "reason": reason,
+        "sentences": sentences,
+        "signals": para_signals,
+        "simple": False,
+    }
+
+
+def _clean_reading_sentence(
+    sent: Any,
+    source: str,
+    *,
+    fallback_to_source: bool = True,
+) -> dict[str, Any] | None:
     """Validate and normalise one AI-produced sentence object.
 
     ``source`` is the English text the sentence (and its chunks) must be copied
@@ -3156,12 +3241,13 @@ def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
     if not isinstance(sent, dict):
         return None
     stext = _norm_text(str(sent.get("text", "")))
-    # We analyse one sentence at a time, so ``source`` is that exact sentence.
-    # If the model paraphrased it (or echoed a placeholder), trust the original
-    # sentence rather than discarding the whole analysis — the chunks/signals
-    # below are still validated against this canonical text.
+    # For legacy single-sentence calls, ``source`` is that exact sentence. In
+    # paragraph mode, invalid sentence text is rejected instead of treating the
+    # whole paragraph as one sentence.
     if (not stext or _bad_reading_value(stext) or _JP_CHARS.search(stext)
             or not _copied_from(stext, source)):
+        if not fallback_to_source:
+            return None
         stext = _norm_text(source)
     if not stext:
         return None
@@ -3191,13 +3277,141 @@ def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
         _clean_reading_signals(sent.get("signals") or [], context=stext),
         _fallback_reading_signals(stext),
     )
+    slash = _clean_reading_slash(
+        sent.get("slash") or sent.get("slash_reading") or sent.get("slash_segments") or [],
+        stext,
+    )
+    if not slash:
+        slash = _slash_from_chunks(chunks, stext)
+    features = _clean_reading_features(
+        sent.get("features") or sent.get("phrases") or sent.get("structures") or [],
+        stext,
+        slash,
+    )
     return {
         "text": stext,
         "pattern": pattern,
         "focus": focus or "詳細",
         "chunks": chunks,
+        "slash": slash,
+        "features": features,
         "signals": signals,
     }
+
+
+def _clean_reading_slash(items: Any, context: str) -> list[str]:
+    clean: list[str] = []
+    if not isinstance(items, list):
+        return clean
+    for item in items:
+        text = item.get("text") if isinstance(item, dict) else item
+        segment = _norm_text(str(text or ""))
+        if (not segment or _bad_reading_value(segment) or _JP_CHARS.search(segment)
+                or not _copied_from(segment, context)):
+            continue
+        if segment.lower() not in {s.lower() for s in clean}:
+            clean.append(segment)
+    return clean
+
+
+def _slash_from_chunks(chunks: list[dict[str, str]], context: str) -> list[str]:
+    segments: list[str] = []
+    for ch in chunks:
+        text = _norm_text(str(ch.get("text") or ""))
+        if text and _copied_from(text, context):
+            segments.append(text)
+    return segments
+
+
+_READING_FEATURE_LABELS = {
+    "noun_phrase": "名詞句",
+    "adverb_phrase": "副詞句",
+    "adjective_phrase": "形容詞句",
+    "noun_clause": "名詞節",
+    "adverb_clause": "副詞節",
+    "adjective_clause": "形容詞節",
+    "idiom": "熟語・慣用句",
+    "discourse_marker": "ディスコースマーカー",
+}
+
+
+def _canonical_reading_feature_type(raw: str) -> str:
+    text = _norm_text(raw).lower().replace("-", "_").replace(" ", "_")
+    if text in _READING_FEATURE_LABELS:
+        return text
+    if "discourse" in text or "marker" in text or "transition" in text:
+        return "discourse_marker"
+    if "idiom" in text or "set_expression" in text or "fixed_expression" in text:
+        return "idiom"
+    if "noun" in text and "clause" in text:
+        return "noun_clause"
+    if ("adverb" in text or "adverbial" in text) and "clause" in text:
+        return "adverb_clause"
+    if ("adjective" in text or "relative" in text) and "clause" in text:
+        return "adjective_clause"
+    if "noun" in text:
+        return "noun_phrase"
+    if "adverb" in text or "adverbial" in text:
+        return "adverb_phrase"
+    if "adjective" in text:
+        return "adjective_phrase"
+    return "idiom"
+
+
+def _feature_label(kind: str, label: str = "") -> str:
+    label = str(label or "").strip()
+    if label and not _bad_reading_value(label) and _JP_CHARS.search(label):
+        return label
+    return _READING_FEATURE_LABELS.get(kind, "熟語・慣用句")
+
+
+def _feature_relation(text: str, requested: str, slash: list[str], context: str) -> str:
+    requested = _norm_text(str(requested or ""))
+    if (requested and not _bad_reading_value(requested) and not _JP_CHARS.search(requested)
+            and _copied_from(requested, context)):
+        for segment in slash:
+            if requested.lower() == segment.lower():
+                return segment
+    for segment in slash:
+        if _copied_from(text, segment) or _copied_from(segment, text):
+            return segment
+    return slash[0] if slash else ""
+
+
+def _clean_reading_features(items: Any, context: str, slash: list[str]) -> list[dict[str, str]]:
+    clean: list[dict[str, str]] = []
+    if not isinstance(items, list):
+        return clean
+    seen: set[tuple[str, str]] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = _norm_text(str(item.get("text") or item.get("match") or ""))
+        if (not text or _bad_reading_value(text) or _JP_CHARS.search(text)
+                or not _copied_from(text, context)):
+            continue
+        kind = _canonical_reading_feature_type(str(item.get("type") or item.get("kind") or ""))
+        key = (kind, text.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        note = str(item.get("note") or item.get("role") or "").strip()
+        if _bad_reading_value(note) or not _JP_CHARS.search(note):
+            note = ""
+        relates_to = _feature_relation(
+            text,
+            str(item.get("relates_to") or item.get("segment") or item.get("slash") or ""),
+            slash,
+            context,
+        )
+        clean.append({
+            "type": kind,
+            "label": _feature_label(kind, str(item.get("label") or "")),
+            "text": text,
+            "relates_to": relates_to,
+            "note": note,
+        })
+    return clean
 
 
 def _clean_reading_signals(items: list[Any], context: str = "") -> list[dict[str, str]]:
@@ -3231,6 +3445,8 @@ _READING_PLACEHOLDERS = {
     "exact original sentence",
     "exact words from the sentence",
     "exact signal word or phrase",
+    "exact slash segment",
+    "exact phrase or clause",
     "sv/svc/svo/svoo/svoc + japanese explanation",
     "要点/対比/理由・原因/結果/結論/具体例/詳細など",
     "接続語/s 主語/v 動詞/o 目的語/c 補語/修飾句",
@@ -3436,10 +3652,11 @@ def _fallback_reading_analysis(text: str, note: str) -> dict[str, Any]:
                 "role": role,
                 "reason": "AI出力が崩れたため、語順と接続語から推定しました。",
                 "sentences": sentences,
+                "simple": True,
             })
     if paragraphs:
         paragraphs[-1]["role"] = "結論・まとめ" if len(paragraphs) > 1 else paragraphs[-1]["role"]
-    return {"paragraphs": paragraphs, "signals": all_signals, "note": note}
+    return {"paragraphs": paragraphs, "signals": all_signals, "note": note, "simple": True}
 
 
 # Common English abbreviations that end in a period but do NOT end a sentence.
@@ -3557,6 +3774,8 @@ def _fallback_sentence_analysis(sentence: str, pi: int, si: int) -> dict[str, An
         return {
             "text": sentence, "pattern": "文型不明", "focus": "詳細",
             "chunks": chunks or [{"kind": "modifier", "label": "文", "text": " ".join(words)}],
+            "slash": [],
+            "features": [],
             "signals": signals,
         }
     # Subject-operator inversion in a question (e.g. "(Why) does a lesson show…"):
@@ -3604,7 +3823,15 @@ def _fallback_sentence_analysis(sentence: str, pi: int, si: int) -> dict[str, An
         "SVO（主語＋動詞＋目的語）" if main_rest else "SV（主語＋動詞）"
     )
     focus = signals[0]["label"] if signals else ("要点" if si == 0 else "詳細")
-    return {"text": sentence, "pattern": pattern, "focus": focus, "chunks": chunks, "signals": signals}
+    return {
+        "text": sentence,
+        "pattern": pattern,
+        "focus": focus,
+        "chunks": chunks,
+        "slash": [],
+        "features": [],
+        "signals": signals,
+    }
 
 
 def _fallback_find_verb(lower: list[str], start: int) -> tuple[int, int]:

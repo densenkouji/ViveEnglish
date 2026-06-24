@@ -380,6 +380,13 @@ h2 { font-size: 1.25rem; margin: 1.6rem 0 .8rem; }
 .reading-token.rs-aux { background: #fbe7d2; color: #9a5a1f; font-style: italic; }
 .reading-token.rs-function { box-shadow: inset 0 -0.38em #fff4cf; }
 .reading-token.rs-signal { outline: 2px solid #86add8; background: #e6f0fd; }
+.simple-analysis-banner { display: grid; gap: .25rem; border: 2px solid #d68138; border-left-width: 8px; border-radius: 10px; background: #fff3df; color: #754216; padding: .9rem 1rem; margin: 0 0 .85rem; box-shadow: 0 6px 18px rgba(138, 78, 27, .12); }
+.simple-analysis-banner.partial { background: #fff8e6; border-color: #d8a84c; box-shadow: none; }
+.simple-analysis-banner b { font-size: 1rem; }
+.simple-analysis-banner span { font-size: .86rem; line-height: 1.6; }
+.slash-row { display: flex; flex-wrap: wrap; gap: .28rem; margin-top: .55rem; font-size: .9rem; line-height: 1.65; }
+.slash-row span { display: inline-flex; align-items: center; border-radius: 8px; background: #eef7f1; border: 1px solid #b9ddca; color: #2c5a51; padding: .14rem .45rem; }
+.slash-row span + span::before { content: "/"; color: #7b8f84; font-weight: 800; margin-right: .38rem; }
 .chunk-row { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
 .chunk { display: inline-flex; gap: .35rem; align-items: baseline; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fdfbf7; padding: .22rem .5rem; font-size: .78rem; color: #5c564d; overflow-wrap: anywhere; }
 .chunk b { color: var(--brand-dark); white-space: nowrap; }
@@ -389,6 +396,14 @@ h2 { font-size: 1.25rem; margin: 1.6rem 0 .8rem; }
 .chunk.interrogative b { color: #9c3f6c; }
 .chunk.auxiliary b { color: #9a5a1f; }
 .chunk.modifier b { color: var(--accent); }
+.feature-row { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+.feature-chip { display: inline-flex; flex-wrap: wrap; gap: .24rem .35rem; align-items: baseline; max-width: 100%; border: 1px solid #d8deea; border-radius: 8px; background: #f7f9fc; color: #3f4a58; padding: .24rem .5rem; font-size: .76rem; overflow-wrap: anywhere; }
+.feature-chip b { color: #315f8f; white-space: nowrap; }
+.feature-chip em { color: #6c7684; font-style: normal; }
+.feature-chip small { color: var(--muted); }
+.feature-chip.discourse_marker { background: #eaf3ff; border-color: #b7d4f1; }
+.feature-chip.idiom { background: #fff5db; border-color: #e7ca7a; }
+.feature-chip.noun_clause, .feature-chip.adverb_clause, .feature-chip.adjective_clause { background: #f2ecff; border-color: #c7b2eb; }
 
 @media (max-width: 860px) {
   .words-layout { grid-template-columns: 1fr; }
