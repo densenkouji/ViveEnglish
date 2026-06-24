@@ -36,6 +36,24 @@ AI_BASE_URL = os.getenv("VIVE_AI_BASE_URL", "").strip()
 AI_API_KEY = os.getenv("VIVE_AI_API_KEY", "notneeded")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1").strip()
 
+# --- OpenAI (ChatGPT) ------------------------------------------------------
+# OpenAI's hosted API (api.openai.com). The secret API key is NEVER stored by
+# the app: the settings screen records the NAME of an environment variable, and
+# the key value is read from that variable at run time via os.getenv().
+# VIVE_OPENAI_API_KEY_ENV only sets which variable name to read by default.
+OPENAI_BASE_URL = os.getenv("VIVE_OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+OPENAI_API_KEY_ENV = os.getenv("VIVE_OPENAI_API_KEY_ENV", "OPENAI_API_KEY").strip()
+OPENAI_CHAT_MODEL = os.getenv("VIVE_OPENAI_CHAT_MODEL", "gpt-4o-mini").strip()
+
+# --- Azure OpenAI ----------------------------------------------------------
+# Azure-hosted OpenAI models via the AzureOpenAI client. Same key policy as
+# above (store the env-var NAME, read the secret at run time). The "chat model"
+# for Azure is the *deployment* name configured in your Azure resource.
+AZURE_OPENAI_ENDPOINT = os.getenv("VIVE_AZURE_OPENAI_ENDPOINT", "").strip()
+AZURE_OPENAI_API_VERSION = os.getenv("VIVE_AZURE_OPENAI_API_VERSION", "2024-10-21").strip()
+AZURE_OPENAI_API_KEY_ENV = os.getenv("VIVE_AZURE_OPENAI_API_KEY_ENV", "AZURE_OPENAI_API_KEY").strip()
+AZURE_OPENAI_DEPLOYMENT = os.getenv("VIVE_AZURE_OPENAI_DEPLOYMENT", "").strip()
+
 # --- Foundry Local ---------------------------------------------------------
 # Foundry Local exposes an OpenAI-compatible endpoint on localhost.
 # If FOUNDRY_BASE_URL is set we use it directly; otherwise we try to discover
@@ -77,6 +95,24 @@ AUTOLOAD_MODEL = os.getenv("VIVE_AUTOLOAD_MODEL", "1") not in ("0", "false", "Fa
 
 # Request timeout (seconds) for AI calls.
 AI_TIMEOUT = float(os.getenv("VIVE_AI_TIMEOUT", "60"))
+
+# --- Reading analysis (high-capability LLM gate) ---------------------------
+# Sentence-by-sentence reading analysis needs a capable model: small local
+# models (e.g. a 2B Foundry Local CPU model) mislabel structure or stall on the
+# JSON contract, so they are restricted to the rule-based simple analysis.
+# Hosted providers (ChatGPT/Azure/OpenAI-compatible) are always allowed.
+# Local providers (Foundry/Ollama) are allowed only when the model's estimated
+# parameter size is at least this many billions of parameters.
+READING_MIN_LOCAL_PARAMS_B = float(os.getenv("VIVE_READING_MIN_PARAMS_B", "7"))
+# Force-allow reading AI analysis regardless of provider/model size. Use when
+# you know your local model is capable but its name carries no size hint.
+READING_FORCE_AI = os.getenv("VIVE_READING_FORCE_AI", "0") not in ("0", "false", "False")
+# Force-disable reading AI analysis (always use the simple rule-based analysis).
+READING_DISABLE_AI = os.getenv("VIVE_READING_DISABLE_AI", "0") not in ("0", "false", "False")
+# Log each sentence that falls back to the simple analysis (and why) to
+# DATA_DIR/reading_debug.log. Use this to diagnose why AI analysis "broke" for
+# some sentences (no response / invalid JSON / failed validation). Off by default.
+READING_DEBUG = os.getenv("VIVE_READING_DEBUG", "0") not in ("0", "false", "False")
 
 APP_NAME = "ViveEnglish"
 APP_VERSION = "1.0.0"

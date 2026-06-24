@@ -1247,6 +1247,14 @@ async function analyzeReadingWithAi(text) {
       onDelta: delta => live.append(delta),
       onError: note => live.note(note),
     });
+    if (r.restricted) {
+      // The model is not capable enough for AI analysis: show the local
+      // rule-based simple analysis and explain how to enable AI analysis.
+      const msg = r.note || "長文読解のAI解析は高機能なLLM向けです。簡易解析を表示しています。";
+      renderReadingAnalysis(text, null, msg, "warn");
+      note.textContent = msg;
+      return;
+    }
     if (r.analysis) {
       renderReadingAnalysis(text, normalizeLlmReadingAnalysis(r.analysis, text), r.note || "AI解析を表示しています。");
       note.textContent = r.note || "AI解析を表示しています。";
@@ -1430,7 +1438,7 @@ const READING_SIGNAL_GROUPS = [
   { key: "reference", label: "指示語", phrases: ["this", "that", "these", "those", "it", "they", "them", "their"] },
 ];
 
-function renderReadingAnalysis(text, analysis = null, modeNote = "") {
+function renderReadingAnalysis(text, analysis = null, modeNote = "", noteKind = "ok") {
   const result = $("#readingResult");
   if (!text.trim()) {
     result.innerHTML = `<div class="notice">英文を入力すると解析結果が表示されます。</div>`;
@@ -1449,7 +1457,7 @@ function renderReadingAnalysis(text, analysis = null, modeNote = "") {
     </div>`).join("");
 
   result.innerHTML = `
-    ${modeNote ? `<div class="notice ok">${esc(modeNote)}</div>` : ""}
+    ${modeNote ? `<div class="notice ${noteKind === "warn" ? "warn" : "ok"}">${esc(modeNote)}</div>` : ""}
     <div class="reading-metrics">
       <div><b>${a.paragraphs.length}</b><span>段落</span></div>
       <div><b>${a.sentences.length}</b><span>文</span></div>
@@ -1489,9 +1497,9 @@ function normalizeLlmReadingAnalysis(analysis, sourceText) {
     };
   }).filter(p => p.sentences.length);
   const sentences = paragraphs.flatMap(p => p.sentences);
-  const signals = (analysis.signals && analysis.signals.length)
-    ? analysis.signals.map(normalizeLlmSignal).filter(Boolean)
-    : sentences.flatMap(s => s.signals);
+  const aiSignals = (analysis.signals || []).map(sig => normalizeLlmSignal(sig, sourceText)).filter(Boolean);
+  const localSignals = analyzeReading(sourceText).signals;
+  const signals = mergeReadingSignals(aiSignals, sentences.flatMap(s => s.signals), localSignals);
   if (!paragraphs.length) return analyzeReading(sourceText);
   return { paragraphs, sentences, signals };
 }
@@ -1502,11 +1510,12 @@ function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
   const words = text.match(/[A-Za-z]+(?:'[A-Za-z]+)?|\d+/g) || [];
   const lower = words.map(w => w.toLowerCase());
   const signals = (s.signals || []).map(sig => normalizeLlmSignal(sig, text)).filter(Boolean);
-  const chunks = (s.chunks || []).map(c => ({
-    kind: normalizeChunkKind(c.kind),
-    label: isBadLlmValue(c.label) ? chunkLabelForKind(c.kind) : (c.label || chunkLabelForKind(c.kind)),
-    text: String(c.text || "").trim(),
-  })).filter(c => c.text && !isBadLlmValue(c.text) && !containsJapanese(c.text) && textCopiedFrom(c.text, text));
+  const chunks = (s.chunks || []).map(c => {
+    const kind = normalizeChunkKind(c.kind);
+    // Always derive the label from the canonical kind so the UI never shows the
+    // model's English label ("subject", "linking verb", …).
+    return { kind, label: chunkLabelForKind(kind), text: String(c.text || "").trim() };
+  }).filter(c => c.text && !isBadLlmValue(c.text) && !containsJapanese(c.text) && textCopiedFrom(c.text, text));
   const wordClasses = words.map(() => new Set());
   chunks.forEach(c => markChunkWords(words, wordClasses, c.text, classForChunk(c.kind)));
   signals.forEach(sig => markChunkWords(words, wordClasses, sig.match, "rs-signal"));
@@ -1516,8 +1525,8 @@ function normalizeLlmSentence(s, paragraphIndex, sentenceIndex, sourceText) {
   });
   return {
     text, words, lower, paragraphIndex, sentenceIndex,
-    pattern: isBadLlmValue(s.pattern) ? "文型不明" : (s.pattern || "文型不明"),
-    focus: isBadLlmValue(s.focus) ? "詳細" : (s.focus || "詳細"),
+    pattern: canonicalReadingPattern(s.pattern),
+    focus: (isBadLlmValue(s.focus) || !containsJapanese(s.focus)) ? "詳細" : (s.focus || "詳細"),
     chunks,
     signals,
     wordClasses,
@@ -1528,12 +1537,57 @@ function normalizeLlmSignal(sig, context = "") {
   if (!sig || !sig.match) return null;
   const match = String(sig.match || "").trim();
   if (isBadLlmValue(match) || containsJapanese(match) || (context && !textCopiedFrom(match, context))) return null;
+  const key = canonicalSignalKey(sig.key);
   return {
-    key: sig.key || "reference",
-    label: isBadLlmValue(sig.label) ? (sig.key || "指示語") : (sig.label || sig.key || "指示語"),
+    key,
+    label: signalLabel(sig.label, key),
     match,
     words: match.toLowerCase().match(/[a-z]+(?:'[a-z]+)?|\d+/g) || [],
   };
+}
+
+function canonicalSignalKey(key) {
+  const k = String(key || "").trim().toLowerCase();
+  return ["contrast", "reason", "cause", "result", "conclusion", "example", "addition", "sequence", "reference"].includes(k)
+    ? k
+    : "reference";
+}
+
+function signalLabel(label, key) {
+  const text = String(label || "").trim();
+  if (text && !isBadLlmValue(text) && containsJapanese(text)) return text;
+  return {
+    contrast: "対比",
+    reason: "理由",
+    cause: "原因",
+    result: "結果",
+    conclusion: "結論",
+    example: "例示",
+    addition: "追加",
+    sequence: "順序",
+    reference: "指示語",
+  }[canonicalSignalKey(key)] || "指示語";
+}
+
+function mergeReadingSignals(...groups) {
+  const out = [];
+  const seen = new Set();
+  groups.flat().filter(Boolean).forEach(sig => {
+    const key = canonicalSignalKey(sig.key);
+    const match = String(sig.match || "").trim();
+    if (!match) return;
+    const id = `${key}:${match.toLowerCase()}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({
+      ...sig,
+      key,
+      label: signalLabel(sig.label, key),
+      match,
+      words: sig.words || match.toLowerCase().match(/[a-z]+(?:'[a-z]+)?|\d+/g) || [],
+    });
+  });
+  return out;
 }
 
 function isBadLlmValue(value) {
@@ -1559,8 +1613,18 @@ function textCopiedFrom(needle, haystack) {
 }
 
 function normalizeChunkKind(kind) {
-  const k = String(kind || "").toLowerCase();
+  const k = String(kind || "").trim().toLowerCase();
   if (["connector", "subject", "verb", "object", "complement", "modifier"].includes(k)) return k;
+  if (!k) return "modifier";
+  // Models often answer with English grammar terms ("linking verb",
+  // "direct object", "subject complement"). Fold them onto a canonical kind so
+  // the Japanese label is derived correctly. Check the more specific terms
+  // first: "subject complement" must resolve to complement, not subject.
+  if (k.includes("connect") || k.includes("conjunction") || k.includes("transition")) return "connector";
+  if (k.includes("complement")) return "complement";
+  if (k.includes("object")) return "object";
+  if (k.includes("subject")) return "subject";
+  if (k.includes("verb") || k.includes("predicate")) return "verb";
   return "modifier";
 }
 
@@ -1573,6 +1637,27 @@ function chunkLabelForKind(kind) {
     complement: "C 補語",
     modifier: "修飾句",
   }[normalizeChunkKind(kind)] || "修飾句";
+}
+
+const READING_PATTERN_LABELS = {
+  SV: "SV（主語＋動詞）",
+  SVC: "SVC（主語＋動詞＋補語）",
+  SVO: "SVO（主語＋動詞＋目的語）",
+  SVOO: "SVOO（主語＋動詞＋目的語＋目的語）",
+  SVOC: "SVOC（主語＋動詞＋目的語＋補語）",
+};
+
+// Models often answer with English glosses like
+// "SVC (subject + linking verb + complement)". Pull the SV/SVC/… token out and
+// relabel it in Japanese so the UI never shows English.
+function canonicalReadingPattern(raw) {
+  const text = String(raw || "").trim();
+  if (!text || isBadLlmValue(text)) return "文型不明";
+  const compact = text.replace(/[^A-Za-z]/g, "").toUpperCase();
+  const m = /^(SVOO|SVOC|SVO|SVC|SV)/.exec(compact);
+  if (m) return READING_PATTERN_LABELS[m[1]];
+  if (containsJapanese(text)) return text;  // already a Japanese description
+  return "文型不明";
 }
 
 function classForChunk(kind) {
@@ -1645,9 +1730,39 @@ function analyzeReading(text) {
   return { paragraphs, sentences, signals };
 }
 
+// Abbreviations ending in a period that must NOT split a sentence (Mr./Ms./…).
+const READING_ABBREV = new Set([
+  "mr", "mrs", "ms", "dr", "prof", "st", "mt", "sr", "jr", "messrs",
+  "vs", "etc", "inc", "ltd", "co", "no", "approx", "dept", "fig",
+  "e.g", "i.e", "a.m", "p.m", "u.s", "u.k",
+]);
+
 function splitReadingSentences(text) {
-  const matches = text.match(/[^.!?]+(?:[.!?]+|$)(?:["')\]]+)?/g) || [text];
-  return matches.map(s => s.trim()).filter(Boolean);
+  const src = String(text || "").trim();
+  if (!src) return [];
+  const sentences = [];
+  let start = 0;
+  const re = /[.!?]+(?:["')\]]+)?/g;
+  let m;
+  while ((m = re.exec(src))) {
+    if (m[0][0] === "." && m[0] === ".") {
+      const prefix = src.slice(start, m.index);
+      const last = /([A-Za-z][A-Za-z.]*)$/.exec(prefix);
+      if (last) {
+        const token = last[1].toLowerCase().replace(/\.+$/, "");
+        if (READING_ABBREV.has(token) || (token.length === 1 && /[a-z]/.test(token))) continue;
+      }
+      const before = m.index > 0 ? src[m.index - 1] : "";
+      const after = re.lastIndex < src.length ? src[re.lastIndex] : "";
+      if (/\d/.test(before) && /\d/.test(after)) continue;  // decimal in a number
+    }
+    const chunk = src.slice(start, re.lastIndex).trim();
+    if (chunk) sentences.push(chunk);
+    start = re.lastIndex;
+  }
+  const tail = src.slice(start).trim();
+  if (tail) sentences.push(tail);
+  return sentences.length ? sentences : [src];
 }
 
 function analyzeReadingSentence(text, paragraphIndex, sentenceIndex) {
@@ -1813,10 +1928,15 @@ routes.profile = async () => {
   const provider = (providerInfo?.provider || state.ai.provider || "foundry");
   const providerLabel = state.ai.provider_label || providerInfo?.provider_label || "Foundry Local";
   const baseUrl = providerInfo?.base_url || "";
+  const apiKeyEnv = providerInfo?.api_key_env || "";
+  const azureEndpoint = providerInfo?.azure_endpoint || "";
+  const azureApiVersion = providerInfo?.azure_api_version || "";
   const providerOptions = [
     ["foundry", "Foundry Local"],
     ["ollama", "Ollama"],
     ["openai", "OpenAI互換URL"],
+    ["chatgpt", "OpenAI (ChatGPT)"],
+    ["azure", "Azure OpenAI"],
   ].map(([v, label]) => `<option value="${v}" ${provider === v ? "selected" : ""}>${label}</option>`).join("");
   const styleOpts = Object.entries(styles.presets).map(([k, s]) => `
     <div class="style-opt ${k === p.art_style ? "active" : ""}" data-style="${k}">
@@ -1855,11 +1975,28 @@ routes.profile = async () => {
           <label>AIプロバイダー</label>
           <select id="aiProvider">${providerOptions}</select>
         </div>
-        <div>
+        <div data-field="base_url">
           <label>接続URL</label>
           <input id="aiBaseUrl" value="${esc(baseUrl)}" placeholder="http://localhost:11434/v1" />
         </div>
-        <div>
+        <div data-field="azure_endpoint">
+          <label>Azure エンドポイント</label>
+          <input id="aiAzureEndpoint" value="${esc(azureEndpoint)}" placeholder="https://<resource>.openai.azure.com" />
+        </div>
+        <div data-field="azure_api_version">
+          <label>API バージョン</label>
+          <input id="aiAzureApiVersion" value="${esc(azureApiVersion)}" placeholder="2024-10-21" />
+        </div>
+        <div data-field="api_key_env">
+          <label>APIキーの環境変数名</label>
+          <input id="aiApiKeyEnv" value="${esc(apiKeyEnv)}" placeholder="OPENAI_API_KEY" />
+          <span class="muted" style="font-size:.78rem">${providerInfo?.uses_env_key ? (providerInfo?.has_api_key ? "✓ 環境変数が設定されています" : "⚠ この環境変数が未設定です") : ""}</span>
+        </div>
+        <div data-field="chat_model">
+          <label>モデル / デプロイ名</label>
+          <input id="aiChatModelName" value="${esc(providerInfo?.chat_model || "")}" placeholder="gpt-4o-mini" />
+        </div>
+        <div data-field="api_key">
           <label>APIキー</label>
           <input id="aiApiKey" type="password" placeholder="${providerInfo?.has_api_key ? "保存済み（変更時のみ入力）" : "任意"}" />
         </div>
@@ -1929,26 +2066,47 @@ function bindAiProviderForm() {
   const providerEl = $("#aiProvider");
   const baseEl = $("#aiBaseUrl");
   const keyEl = $("#aiApiKey");
+  const keyEnvEl = $("#aiApiKeyEnv");
+  const azureEndpointEl = $("#aiAzureEndpoint");
+  const azureVersionEl = $("#aiAzureApiVersion");
+  const chatModelEl = $("#aiChatModelName");
   const helpEl = $("#aiProviderHelp");
-  if (!providerEl || !baseEl || !keyEl) return;
+  if (!providerEl || !baseEl) return;
   const defaults = {
     foundry: "",
     ollama: "http://localhost:11434/v1",
     openai: "",
+    chatgpt: "https://api.openai.com/v1",
   };
+  const keyEnvDefaults = { chatgpt: "OPENAI_API_KEY", azure: "AZURE_OPENAI_API_KEY" };
+  const modelPlaceholders = { chatgpt: "gpt-4o-mini", azure: "（Azureのデプロイ名）" };
   const helps = {
     foundry: "Foundry Localを自動起動・自動検出します。接続URLとAPIキーは通常不要です。",
     ollama: "Ollamaを使う場合は先にOllamaを起動し、モデルをpullしてください。例: ollama pull qwen2.5:3b",
     openai: "OpenAI互換の /v1 エンドポイントを指定できます。必要な場合だけAPIキーを入力してください。",
+    chatgpt: "OpenAI公式API(api.openai.com)に接続します。APIキーはOSの環境変数に設定し、ここにはその環境変数名を入力します（キー自体はアプリに保存されません）。",
+    azure: "Azure OpenAI に接続します。エンドポイント・APIバージョン・デプロイ名を指定し、APIキーは環境変数名で指定します（キー自体はアプリに保存されません）。",
+  };
+  // Which fields each provider shows.
+  const FIELDS = {
+    foundry: [],
+    ollama: ["base_url"],
+    openai: ["base_url", "api_key"],
+    chatgpt: ["base_url", "api_key_env", "chat_model"],
+    azure: ["azure_endpoint", "azure_api_version", "api_key_env", "chat_model"],
   };
   const sync = () => {
     const p = providerEl.value;
-    baseEl.disabled = p === "foundry";
-    keyEl.disabled = p === "foundry";
+    const show = new Set(FIELDS[p] || []);
+    $$("[data-field]").forEach(el => {
+      el.style.display = show.has(el.dataset.field) ? "" : "none";
+    });
     baseEl.placeholder = defaults[p] || "";
     helpEl.textContent = helps[p] || "";
     if (p === "ollama" && !baseEl.value.trim()) baseEl.value = defaults.ollama;
-    if (p === "foundry") baseEl.value = "";
+    if (p === "chatgpt" && !baseEl.value.trim()) baseEl.value = defaults.chatgpt;
+    if (keyEnvEl && keyEnvDefaults[p] && !keyEnvEl.value.trim()) keyEnvEl.value = keyEnvDefaults[p];
+    if (chatModelEl) chatModelEl.placeholder = modelPlaceholders[p] || "";
   };
   providerEl.addEventListener("change", sync);
   sync();
@@ -1956,8 +2114,13 @@ function bindAiProviderForm() {
   $("#saveAiProvider").addEventListener("click", async () => {
     const provider = providerEl.value;
     const body = { provider };
-    if (provider !== "foundry") body.base_url = baseEl.value.trim();
-    if (keyEl.value.trim()) body.api_key = keyEl.value.trim();
+    const fields = new Set(FIELDS[provider] || []);
+    if (fields.has("base_url")) body.base_url = baseEl.value.trim();
+    if (fields.has("api_key") && keyEl && keyEl.value.trim()) body.api_key = keyEl.value.trim();
+    if (fields.has("api_key_env") && keyEnvEl) body.api_key_env = keyEnvEl.value.trim();
+    if (fields.has("azure_endpoint") && azureEndpointEl) body.azure_endpoint = azureEndpointEl.value.trim();
+    if (fields.has("azure_api_version") && azureVersionEl) body.azure_api_version = azureVersionEl.value.trim();
+    if (fields.has("chat_model") && chatModelEl) body.chat_model = chatModelEl.value.trim();
     try {
       state.ai = await post("/ai/provider", body);
       setAiBadge();

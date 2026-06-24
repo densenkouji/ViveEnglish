@@ -114,11 +114,16 @@ class ModelDeleteReq(BaseModel):
 
 
 class AiProviderReq(BaseModel):
-    provider: str         # foundry|ollama|openai
+    provider: str         # foundry|ollama|openai|chatgpt|azure
     base_url: str | None = None
     api_key: str | None = None
     chat_model: str | None = None
     translate_model: str | None = None
+    # chatgpt/azure: the NAME of the env var holding the API key (never the key
+    # itself) plus the Azure endpoint / api-version.
+    api_key_env: str | None = None
+    azure_endpoint: str | None = None
+    azure_api_version: str | None = None
 
 
 class AiTestReq(BaseModel):
@@ -159,13 +164,17 @@ def ai_provider() -> dict[str, Any]:
 
 @app.post("/api/ai/provider")
 def ai_provider_set(req: AiProviderReq) -> dict[str, Any]:
-    """Choose Foundry Local, Ollama, or another OpenAI-compatible endpoint."""
+    """Choose Foundry Local, Ollama, OpenAI/ChatGPT, Azure OpenAI, or a custom
+    OpenAI-compatible endpoint."""
     return foundry.set_ai_provider(
         req.provider,
         base_url=req.base_url,
         api_key=req.api_key,
         chat_model=req.chat_model,
         translate_model=req.translate_model,
+        api_key_env=req.api_key_env,
+        azure_endpoint=req.azure_endpoint,
+        azure_api_version=req.azure_api_version,
     )
 
 

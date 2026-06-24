@@ -59,6 +59,9 @@ def _base_status() -> dict[str, Any]:
     st["provider_label"] = _provider_label(provider)
     if provider != "foundry" and not st.get("base_url"):
         st["base_url"] = eff_ai_base_url() or None
+    # Whether the active model is capable enough for long-passage AI analysis.
+    reading_ok, reading_note = _reading_ai_gate()
+    st["reading_ai"] = {"available": reading_ok, "note": reading_note}
     return st
 
 
@@ -77,13 +80,24 @@ _PROVIDER_LABELS = {
     "foundry": "Foundry Local",
     "ollama": "Ollama",
     "openai": "OpenAI互換",
+    "chatgpt": "OpenAI (ChatGPT)",
+    "azure": "Azure OpenAI",
 }
+
+# Providers whose API key is supplied indirectly: the user picks the NAME of an
+# environment variable in the settings UI and the secret value is read from that
+# variable at run time (never persisted by the app).
+_ENV_KEY_PROVIDERS = ("chatgpt", "azure")
 
 
 def _provider_key(value: str | None) -> str:
     key = (value or "").strip().lower().replace("-", "_")
     if key in ("ollama",):
         return "ollama"
+    if key in ("chatgpt", "openai_chat", "openai_hosted", "openai_api"):
+        return "chatgpt"
+    if key in ("azure", "azure_openai", "azureopenai", "aoai"):
+        return "azure"
     if key in ("openai", "custom", "custom_openai", "openai_compatible",
                "openai_compat", "compatible"):
         return "openai"
@@ -98,6 +112,58 @@ def eff_ai_provider() -> str:
     return _provider_key(_prefs().get("ai_provider") or config.AI_PROVIDER)
 
 
+# --- Per-provider connection config (URL / endpoint / api-version / env name) -
+# chatgpt and azure keep their connection details under settings["provider_conf"]
+# [provider] so the two never clash. The API SECRET is never stored here — only
+# the NAME of the environment variable that holds it (see _env_api_key()).
+
+def _provider_conf_store(settings: dict[str, Any], provider: str,
+                         *, create: bool = False) -> dict[str, Any]:
+    by = settings.get("provider_conf")
+    if not isinstance(by, dict):
+        if not create:
+            return {}
+        by = {}
+        settings["provider_conf"] = by
+    store = by.get(provider)
+    if not isinstance(store, dict):
+        if not create:
+            return {}
+        store = {}
+        by[provider] = store
+    return store
+
+
+def _conf(key: str, provider: str | None = None) -> str:
+    provider = provider or eff_ai_provider()
+    return (_provider_conf_store(_prefs(), provider).get(key) or "").strip()
+
+
+def eff_api_key_env_name() -> str:
+    """Name of the env var holding the API key for chatgpt/azure."""
+    provider = eff_ai_provider()
+    saved = _conf("api_key_env", provider)
+    if provider == "chatgpt":
+        return saved or config.OPENAI_API_KEY_ENV
+    if provider == "azure":
+        return saved or config.AZURE_OPENAI_API_KEY_ENV
+    return saved
+
+
+def _env_api_key() -> str:
+    """Resolve the secret API key by reading the configured env-var name."""
+    name = eff_api_key_env_name()
+    return (os.getenv(name, "") if name else "").strip()
+
+
+def eff_azure_endpoint() -> str:
+    return _conf("endpoint", "azure") or config.AZURE_OPENAI_ENDPOINT
+
+
+def eff_azure_api_version() -> str:
+    return _conf("api_version", "azure") or config.AZURE_OPENAI_API_VERSION
+
+
 def eff_ai_base_url() -> str:
     provider = eff_ai_provider()
     prefs = _prefs()
@@ -106,11 +172,17 @@ def eff_ai_base_url() -> str:
         return saved or config.AI_BASE_URL or config.OLLAMA_BASE_URL
     if provider == "openai":
         return saved or config.AI_BASE_URL
+    if provider == "chatgpt":
+        return _conf("base_url", "chatgpt") or config.OPENAI_BASE_URL
+    # azure uses an endpoint + api_version instead of an OpenAI-style base url.
     return ""
 
 
 def eff_ai_api_key() -> str:
     provider = eff_ai_provider()
+    if provider in _ENV_KEY_PROVIDERS:
+        # Key comes from an environment variable named in the settings.
+        return _env_api_key() or "missing-api-key"
     saved = (_prefs().get("ai_api_key") or "").strip()
     if provider == "foundry":
         return saved or config.FOUNDRY_API_KEY
@@ -124,20 +196,35 @@ def provider_settings() -> dict[str, Any]:
     base = eff_ai_base_url()
     stored_key = (_prefs().get("ai_api_key") or "").strip()
     env_key = "" if config.AI_API_KEY == "notneeded" else (config.AI_API_KEY or "").strip()
-    return {
+    info: dict[str, Any] = {
         "provider": provider,
         "provider_label": _provider_label(provider),
         "base_url": base,
         "default_base_url": config.OLLAMA_BASE_URL if provider == "ollama" else config.AI_BASE_URL,
         "has_api_key": bool(stored_key or env_key),
+        "uses_env_key": provider in _ENV_KEY_PROVIDERS,
         "status": status(),
     }
+    if provider in _ENV_KEY_PROVIDERS:
+        env_name = eff_api_key_env_name()
+        info["api_key_env"] = env_name
+        # Report whether the named variable is actually set, without ever
+        # exposing the secret value itself.
+        info["has_api_key"] = bool(env_name and os.getenv(env_name, "").strip())
+        info["chat_model"] = eff_chat_model()
+    if provider == "azure":
+        info["azure_endpoint"] = eff_azure_endpoint()
+        info["azure_api_version"] = eff_azure_api_version()
+    return info
 
 
 def set_ai_provider(provider: str, base_url: str | None = None,
                     api_key: str | None = None,
                     chat_model: str | None = None,
-                    translate_model: str | None = None) -> dict[str, Any]:
+                    translate_model: str | None = None,
+                    api_key_env: str | None = None,
+                    azure_endpoint: str | None = None,
+                    azure_api_version: str | None = None) -> dict[str, Any]:
     provider = _provider_key(provider)
     settings = _prefs()
     settings["ai_provider"] = provider
@@ -153,6 +240,16 @@ def set_ai_provider(provider: str, base_url: str | None = None,
             settings["ai_api_key"] = api_key
         else:
             settings.pop("ai_api_key", None)
+    # chatgpt/azure connection details (env-var NAME, Azure endpoint/version).
+    # We deliberately store only the env-var name here — never the key value.
+    if any(v is not None for v in (api_key_env, azure_endpoint, azure_api_version)):
+        conf = _provider_conf_store(settings, provider, create=True)
+        if api_key_env is not None:
+            conf["api_key_env"] = api_key_env.strip()
+        if azure_endpoint is not None:
+            conf["endpoint"] = azure_endpoint.strip().rstrip("/")
+        if azure_api_version is not None:
+            conf["api_version"] = azure_api_version.strip()
     # Model choices are scoped to the provider they were made for so switching
     # providers never carries a model that only exists on the other one.
     if chat_model is not None or translate_model is not None:
@@ -203,8 +300,17 @@ def _model_pref(key: str, provider: str | None = None) -> str:
     return ""
 
 
+def _default_chat_model(provider: str) -> str:
+    if provider == "chatgpt":
+        return config.OPENAI_CHAT_MODEL
+    if provider == "azure":
+        return config.AZURE_OPENAI_DEPLOYMENT
+    return config.CHAT_MODEL
+
+
 def eff_chat_model() -> str:
-    return _model_pref("chat_model") or config.CHAT_MODEL
+    provider = eff_ai_provider()
+    return _model_pref("chat_model", provider) or _default_chat_model(provider)
 
 
 def eff_translate_model() -> str:
@@ -654,6 +760,49 @@ def _force_managed_base_url() -> str | None:
     return None
 
 
+# --- Client construction (OpenAI / Azure OpenAI) ---------------------------
+
+def _make_client(provider: str, base: str | None):
+    """Build the right OpenAI-compatible client for the active provider.
+
+    Azure OpenAI needs the dedicated AzureOpenAI client (endpoint + api-version);
+    every other provider (foundry/ollama/openai/chatgpt) speaks the standard
+    OpenAI base-url protocol.
+    """
+    if provider == "azure":
+        from openai import AzureOpenAI
+        return AzureOpenAI(
+            azure_endpoint=eff_azure_endpoint(),
+            api_version=eff_azure_api_version(),
+            api_key=eff_ai_api_key(),
+            timeout=config.AI_TIMEOUT, max_retries=0,
+        )
+    from openai import OpenAI
+    return OpenAI(base_url=base, api_key=eff_ai_api_key(),
+                  timeout=config.AI_TIMEOUT, max_retries=0)
+
+
+def _env_provider_config_error(provider: str) -> str:
+    """Return a Japanese error if a chatgpt/azure provider is misconfigured.
+
+    The API key is read from an environment variable whose NAME the user sets in
+    the settings screen; here we verify that the prerequisites are present
+    without ever logging the secret value itself.
+    """
+    env_name = eff_api_key_env_name()
+    if not env_name:
+        return "APIキーを保持する環境変数名が未設定です。設定画面で環境変数名を入力してください。"
+    if not os.getenv(env_name, "").strip():
+        return (f"環境変数 {env_name} が設定されていません。"
+                f"OSの環境変数に {env_name} を設定してアプリを再起動してください。")
+    if provider == "azure":
+        if not eff_azure_endpoint():
+            return "Azure OpenAI のエンドポイントURLが未設定です。"
+        if not eff_chat_model():
+            return "Azure OpenAI のデプロイ名（会話モデル）が未設定です。"
+    return ""
+
+
 # --- Init / status ---------------------------------------------------------
 
 def _ensure_loaded(model_id: str) -> bool:
@@ -691,6 +840,56 @@ def _is_not_loaded_error(exc: Exception) -> bool:
     return "is not loaded" in msg or "load the model" in msg
 
 
+# Newer OpenAI / Azure OpenAI models (o-series, gpt-5 family, …) reject the
+# legacy ``max_tokens`` parameter and require ``max_completion_tokens`` instead,
+# and some only accept the default ``temperature``. These are surfaced as 400
+# ``unsupported_parameter`` / ``unsupported_value`` errors. We retry once with
+# the offending parameter swapped/dropped rather than hard-coding per-model
+# rules, so the same code keeps working as model families change.
+
+def _adjust_unsupported_params(exc: Exception, kw: dict[str, Any]) -> dict[str, Any] | None:
+    """Return adjusted kwargs to retry after an 'unsupported parameter' 400.
+
+    Returns None when the error is not a parameter-compatibility issue (so the
+    caller can fall through to its other handling).
+    """
+    msg = str(exc or "").lower()
+    changed = False
+    new_kw = dict(kw)
+    # max_tokens -> max_completion_tokens (reasoning / gpt-5 era models).
+    if "max_tokens" in msg and ("max_completion_tokens" in msg
+                                or "not supported" in msg or "unsupported" in msg):
+        if "max_tokens" in new_kw:
+            new_kw["max_completion_tokens"] = new_kw.pop("max_tokens")
+            changed = True
+    # temperature: some models only allow the default value.
+    if "temperature" in msg and ("unsupported" in msg or "does not support" in msg
+                                 or "not supported" in msg or "only the default" in msg):
+        if "temperature" in new_kw:
+            new_kw.pop("temperature", None)
+            changed = True
+    return new_kw if changed else None
+
+
+def _create_completion(**kw: Any):
+    """Call chat.completions.create, auto-adapting unsupported parameters.
+
+    Some hosted models reject more than one legacy parameter (e.g. both
+    ``max_tokens`` AND ``temperature``), but the API reports only one offending
+    parameter per 400 response. So we swap/drop the named parameter and retry,
+    looping until the call succeeds or the error is no longer a fixable
+    parameter-compatibility issue. ``stream=True`` works the same way.
+    """
+    while True:
+        try:
+            return _client.chat.completions.create(**kw)
+        except Exception as exc:
+            fixed = _adjust_unsupported_params(exc, kw)
+            if fixed is None or fixed == kw:
+                raise
+            kw = fixed
+
+
 def init() -> dict[str, Any]:
     """Probe / start Foundry Local. Safe to call repeatedly."""
     global _client, _base_url, _model, _translate_model, _status
@@ -707,8 +906,21 @@ def init() -> dict[str, Any]:
                        "managed": False, "port": None}
             return _status
 
+        # chatgpt/azure read the API key from a user-named environment variable.
+        # Surface a clear, secret-free message when that is not set up yet.
+        if provider in _ENV_KEY_PROVIDERS:
+            conf_err = _env_provider_config_error(provider)
+            if conf_err:
+                _status.update(online=False, provider=provider,
+                               provider_label=_provider_label(provider),
+                               base_url=None, model=eff_chat_model() or None,
+                               translate_model=None, managed=False, note=conf_err)
+                return _status
+
         base = _resolve_base_url()
-        if not base:
+        # Azure uses an endpoint + api-version instead of an OpenAI base url, so
+        # an empty base is expected there; every other provider needs a base.
+        if not base and provider != "azure":
             _status.update(online=False, base_url=None, model=None,
                            provider=provider, provider_label=_provider_label(provider),
                            managed=False if provider != "foundry" else _status.get("managed", False),
@@ -721,23 +933,31 @@ def init() -> dict[str, Any]:
         translate_pref = eff_translate_model()
         model = chat_pref
         try:
-            client = OpenAI(base_url=base, api_key=eff_ai_api_key(),
-                            timeout=config.AI_TIMEOUT, max_retries=0)
-            models = client.models.list()
-            ids = [m.id for m in getattr(models, "data", [])]
-            picked = _pick_chat_model(ids, _manager if provider == "foundry" else None)
-            if picked:
-                model = picked
-            # Ensure the chosen chat model is actually loaded (cached-but-not-
-            # loaded models are listed by /v1/models but reject completions).
-            if provider == "foundry":
-                _ensure_loaded(model)
-            translate_model = _resolve_configured_model(ids, translate_pref) if translate_pref else model
-            if provider == "foundry" and translate_model and translate_model != model:
-                _ensure_loaded(translate_model)
+            client = _make_client(provider, base)
+            # For hosted providers (chatgpt/azure) we trust the user's chosen
+            # model/deployment rather than auto-picking from /v1/models: their
+            # catalogs are large and include many non-chat ids, and Azure lists
+            # deployments differently. Foundry/Ollama keep the auto-pick path.
+            if provider in _ENV_KEY_PROVIDERS:
+                if not model:
+                    raise ValueError("会話モデル名が未設定です。")
+                translate_model = translate_pref or model
+            else:
+                models = client.models.list()
+                ids = [m.id for m in getattr(models, "data", [])]
+                picked = _pick_chat_model(ids, _manager if provider == "foundry" else None)
+                if picked:
+                    model = picked
+                # Ensure the chosen chat model is actually loaded (cached-but-not-
+                # loaded models are listed by /v1/models but reject completions).
+                if provider == "foundry":
+                    _ensure_loaded(model)
+                translate_model = _resolve_configured_model(ids, translate_pref) if translate_pref else model
+                if provider == "foundry" and translate_model and translate_model != model:
+                    _ensure_loaded(translate_model)
             _client, _base_url, _model, _translate_model = client, base, model, translate_model
             note = "ready"
-            if ids and _NON_CHAT.search(model or ""):
+            if provider not in _ENV_KEY_PROVIDERS and _NON_CHAT.search(model or ""):
                 note = ("warning: selected model may not support chat. "
                         "設定画面でテキスト/チャット対応モデルを選んでください。")
             _status.update(online=True, provider=provider,
@@ -838,14 +1058,14 @@ def test_model(kind: str = "chat") -> dict[str, Any]:
 
     start = time.perf_counter()
     try:
+        kw: dict[str, Any] = dict(model=model, messages=messages,
+                                  temperature=0, max_tokens=80)
         try:
-            resp = _client.chat.completions.create(
-                model=model, messages=messages, temperature=0, max_tokens=80)
+            resp = _create_completion(**kw)
         except Exception as exc:
             # Cached-but-not-loaded model: load it on demand and retry once.
             if provider == "foundry" and _is_not_loaded_error(exc) and _ensure_loaded(model):
-                resp = _client.chat.completions.create(
-                    model=model, messages=messages, temperature=0, max_tokens=80)
+                resp = _create_completion(**kw)
             else:
                 raise
         content = (resp.choices[0].message.content or "").strip()
@@ -1326,11 +1546,36 @@ def list_models() -> dict[str, Any]:
             "current": current, "status": status_snapshot, "models": models}
 
 
+def _synthetic_model_rows(ids: list[str], selected: dict[str, str],
+                          current: dict[str, str]) -> list[dict[str, Any]]:
+    """Build model rows from a plain list of ids (no live catalog)."""
+    models = []
+    for mid in ids:
+        if not mid:
+            continue
+        kind = _model_kind(mid)
+        selected_kinds = [k for k, ref in selected.items()
+                          if ref and _external_model_ref_matches(ref, mid)]
+        active_kinds = [k for k, ref in current.items()
+                        if ref and _external_model_ref_matches(ref, mid)]
+        models.append({
+            "id": mid, "alias": mid, "task": "chat-completion", "kind": kind,
+            "cached": True, "loaded": bool(active_kinds),
+            "selected_kinds": selected_kinds, "active_kinds": active_kinds,
+        })
+    models.sort(key=lambda x: (x["kind"] != "chat", x["id"]))
+    return models
+
+
 def _list_openai_models(provider: str, selected: dict[str, str],
                         current: dict[str, str],
                         status_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """List models from an external OpenAI-compatible endpoint such as Ollama."""
-    base = eff_ai_base_url()
+    """List models from a hosted/compatible provider for the settings UI.
+
+    Ollama / OpenAI互換URL / ChatGPT expose a usable /v1/models list. Azure
+    OpenAI does not list *deployments* this way, so we present the configured
+    deployment name(s) as the available models instead.
+    """
     common = {
         "provider": provider,
         "manageable": False,
@@ -1339,6 +1584,33 @@ def _list_openai_models(provider: str, selected: dict[str, str],
         "status": status_snapshot,
         "models": [],
     }
+
+    if provider == "azure":
+        # Azure: surface the configured deployment names (chat + translate) as
+        # the selectable "models"; there is no reliable deployment-list API.
+        if not eff_azure_endpoint():
+            return {**common, "online": False,
+                    "note": "Azure OpenAI のエンドポイントURLを設定してください。"}
+        env_err = _env_provider_config_error(provider)
+        if env_err:
+            return {**common, "online": False, "note": env_err}
+        ids = []
+        for ref in (selected.get("chat"), selected.get("translate"),
+                    current.get("chat"), current.get("translate")):
+            ref = (ref or "").strip()
+            if ref and ref not in ids:
+                ids.append(ref)
+        note = ("Azure ではデプロイ名を会話モデル欄に入力してください。"
+                if not ids else "")
+        return {**common, "online": bool(status_snapshot.get("online")),
+                "note": note, "models": _synthetic_model_rows(ids, selected, current)}
+
+    if provider == "chatgpt":
+        env_err = _env_provider_config_error(provider)
+        if env_err:
+            return {**common, "online": False, "note": env_err}
+
+    base = eff_ai_base_url()
     if not base:
         return {**common, "online": False,
                 "note": f"{_provider_label(provider)} の接続先URLを設定してください。"}
@@ -1546,6 +1818,60 @@ def _run_download(alias: str, kind: str) -> None:
                message=f"{label}（{alias}）の準備が完了しました。")
 
 
+def _completion_parts(resp: Any) -> tuple[str, str]:
+    """Return ``(text, finish_reason)`` from a chat-completion response.
+
+    ``text`` is "" when there is no usable content. Some small local models
+    leave ``message.content`` empty but place the answer in ``reasoning_content``
+    (a non-standard field a few OpenAI-compatible servers emit), so fall back to
+    that before giving up. ``finish_reason`` lets callers tell a deliberate empty
+    answer ("stop") from a truncated one ("length") — the latter is how a
+    reasoning model (o-series / gpt-5 family) signals it spent the whole token
+    budget on hidden reasoning before emitting any visible content.
+    """
+    try:
+        choice = resp.choices[0]
+    except Exception:
+        return "", ""
+    msg = getattr(choice, "message", None)
+    content = getattr(msg, "content", None) if msg is not None else None
+    if not content and msg is not None:
+        content = getattr(msg, "reasoning_content", None)
+    finish = getattr(choice, "finish_reason", "") or ""
+    return (content or ""), finish
+
+
+def _call_completion_text(kw: dict[str, Any]) -> tuple[str, str]:
+    """Run one completion, growing the token budget when a reasoning model
+    truncates before emitting any content.
+
+    A reasoning model can return empty content with ``finish_reason == 'length'``
+    when its ``max_completion_tokens`` budget is consumed entirely by hidden
+    reasoning. A small per-sentence budget (e.g. 600) triggers this. We retry the
+    same call with a larger budget so the visible answer fits. Returns
+    ``(text, finish_reason)`` from the last attempt.
+    """
+    resp = _create_completion(**kw)
+    content, finish = _completion_parts(resp)
+    kw = dict(kw)
+    bumps = 0
+    while not content and finish == "length" and bumps < 2:
+        budget = kw.get("max_completion_tokens") or kw.get("max_tokens") or 600
+        new_budget = min(int(budget) * 4, 8000)
+        if new_budget <= budget:
+            break
+        # _create_completion swaps max_tokens -> max_completion_tokens for
+        # reasoning models, so bumping whichever key is present is enough.
+        if "max_completion_tokens" in kw:
+            kw["max_completion_tokens"] = new_budget
+        else:
+            kw["max_tokens"] = new_budget
+        bumps += 1
+        resp = _create_completion(**kw)
+        content, finish = _completion_parts(resp)
+    return content, finish
+
+
 def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,
           max_tokens: int = 512, json_mode: bool = False,
           model: str | None = None) -> str | None:
@@ -1561,10 +1887,21 @@ def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,
     attempts = ([{**base, "response_format": {"type": "json_object"}}] if json_mode else []) + [base]
     last = None
     reloaded = False
+    saw_empty = False
+    empty_finish = ""
     for kw in attempts:
         try:
-            resp = _client.chat.completions.create(**kw)
-            return resp.choices[0].message.content
+            content, finish = _call_completion_text(kw)
+            # A model can return an empty body without raising — a small local
+            # model in JSON mode, or a reasoning model that spent its whole token
+            # budget on hidden reasoning. Don't return the empty string: fall
+            # through to the next attempt (e.g. plain mode), which often
+            # succeeds. Only the final attempt's emptiness is fatal.
+            if content:
+                return content
+            saw_empty = True
+            empty_finish = finish or empty_finish
+            continue
         except Exception as exc:  # pragma: no cover
             last = exc
             # Load a cached-but-not-loaded Foundry model once, then retry.
@@ -1572,13 +1909,24 @@ def _chat(messages: list[dict[str, str]], *, temperature: float = 0.4,
                     and _is_not_loaded_error(exc) and _ensure_loaded(kw.get("model"))):
                 reloaded = True
                 try:
-                    resp = _client.chat.completions.create(**kw)
-                    return resp.choices[0].message.content
+                    content, finish = _call_completion_text(kw)
+                    if content:
+                        return content
+                    saw_empty = True
+                    empty_finish = finish or empty_finish
                 except Exception as exc2:
                     last = exc2
             continue
-    _status["online"] = False
-    _status["note"] = f"call failed: {last}"
+    # Distinguish a genuine call failure (exception) from an empty body so the
+    # status note — and the reading debug log — point at the real cause.
+    if last is not None:
+        _status["online"] = False
+        _status["note"] = f"call failed: {last}"
+    elif saw_empty:
+        hint = (" (finish_reason=length: 推論モデルがトークン上限に達した可能性)"
+                if empty_finish == "length" else
+                (f" (finish_reason={empty_finish})" if empty_finish else ""))
+        _status["note"] = "empty response (model returned no content)" + hint
     return None
 
 
@@ -1599,12 +1947,12 @@ def _chat_stream(messages: list[dict[str, str]], *, temperature: float = 0.4,
     for kw in attempts:
         try:
             try:
-                stream = _client.chat.completions.create(**kw)
+                stream = _create_completion(**kw)
             except Exception as exc:
                 if (not reloaded and eff_ai_provider() == "foundry"
                         and _is_not_loaded_error(exc) and _ensure_loaded(kw.get("model"))):
                     reloaded = True
-                    stream = _client.chat.completions.create(**kw)
+                    stream = _create_completion(**kw)
                 else:
                     raise
             for chunk in stream:
@@ -1686,7 +2034,7 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
     raw = _chat(
         [{"role": "system", "content": instruction},
          {"role": "user", "content": text}],
-        temperature=0.2, max_tokens=300, json_mode=True,
+        temperature=0.2, max_tokens=_translation_token_budget(text, mode), json_mode=True,
         model=(_translate_model or config.TRANSLATE_MODEL or None),
     )
     if raw:
@@ -1696,8 +2044,15 @@ def translate(text: str, mode: str = "auto", glossary: dict | None = None) -> di
                 return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
             parsed.setdefault("note", "")
             return {"source": text, "online": True, **parsed}
+        recovered = _recover_translation_json(raw)
+        if recovered and recovered.get("translation"):
+            if mode != "word" and _looks_untranslated(text, str(recovered.get("translation", ""))):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
+            recovered.setdefault("note", "")
+            return {"source": text, "online": True, **recovered}
         # Model returned plain text (no JSON): use it directly as the translation.
-        cleaned = _plain_text(raw)
+        # Do not show a broken JSON fragment as a learner-facing translation.
+        cleaned = "" if _looks_like_json(raw) else _plain_text(raw)
         if cleaned:
             if mode != "word" and _looks_untranslated(text, cleaned):
                 return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
@@ -1741,7 +2096,13 @@ def translate_stream(text: str, mode: str = "auto", glossary: dict | None = None
                 return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
             parsed.setdefault("note", "")
             return {"source": text, "online": True, **parsed}
-        cleaned = _plain_text(raw)
+        recovered = _recover_translation_json(raw)
+        if recovered and recovered.get("translation"):
+            if mode != "word" and _looks_untranslated(text, str(recovered.get("translation", ""))):
+                return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
+            recovered.setdefault("note", "")
+            return {"source": text, "online": True, **recovered}
+        cleaned = "" if _looks_like_json(raw) else _plain_text(raw)
         if cleaned:
             if mode != "word" and _looks_untranslated(text, cleaned):
                 return _translation_failed(text, "モデルが原文を返したため、和訳としては表示しません。")
@@ -1751,10 +2112,57 @@ def translate_stream(text: str, mode: str = "auto", glossary: dict | None = None
     return _stream_completion(
         [{"role": "system", "content": instruction},
          {"role": "user", "content": text}],
-        temperature=0.2, max_tokens=300, json_mode=True,
+        temperature=0.2, max_tokens=_translation_token_budget(text, mode), json_mode=True,
         model=(_translate_model or config.TRANSLATE_MODEL or None),
         finish=finish, fallback=lambda: translate(text, mode, glossary),
     )
+
+
+def _translation_token_budget(text: str, mode: str) -> int:
+    """Size translation completions for whole passages, not just one sentence."""
+    if mode == "word":
+        return 300
+    # Japanese translation plus JSON escaping/note overhead. Keep the cap modest
+    # for local models, but high enough that reading-passage translations do not
+    # stop after the opening phrase.
+    return max(700, min(2200, len(text) * 3 + 500))
+
+
+def _json_string_field_closed(raw: str, field: str) -> tuple[str, bool]:
+    if not raw:
+        return "", False
+    m = re.search(r'"' + re.escape(field) + r'"\s*:\s*"', raw)
+    if not m:
+        return "", False
+    esc = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+    out: list[str] = []
+    i, n = m.end(), len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\" and i + 1 < n:
+            out.append(esc.get(raw[i + 1], raw[i + 1]))
+            i += 2
+            continue
+        if c == '"':
+            return "".join(out).strip(), True
+        out.append(c)
+        i += 1
+    return "".join(out).strip(), False
+
+
+def _recover_translation_json(raw: str) -> dict[str, str] | None:
+    """Recover translation JSON only when the translation string is complete."""
+    if not _looks_like_json(raw):
+        return None
+    translation, closed = _json_string_field_closed(raw, "translation")
+    if not translation or not closed:
+        return None
+    note, _ = _json_string_field_closed(raw, "note")
+    pos, _ = _json_string_field_closed(raw, "pos")
+    result = {"translation": translation, "note": note}
+    if pos:
+        result["pos"] = pos
+    return result
 
 
 def _translation_failed(source: str, note: str) -> dict[str, Any]:
@@ -2190,7 +2598,7 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
              f"Genre: {angle['genre']}\nAngle: {angle['angle']}\n"
              f"Structure: {angle['structure']}\nSeed: {seed}"
          )}],
-        temperature=0.85, max_tokens=1200, json_mode=True,
+        temperature=0.85, max_tokens=2000, json_mode=True,
     )
     if raw:
         parsed = _safe_json(raw)
@@ -2207,8 +2615,18 @@ def generate_reading_passage(topic: str = "", level: str = "beginner",
                 return {"online": True,
                         "title": str(parsed.get("title", "")).strip(),
                         "passage": passage, "passage_ja": passage_ja, "note": ""}
+        # JSON was malformed/truncated: recover the passage fields directly so we
+        # never dump raw JSON braces into the reading screen.
+        recovered = _recover_passage_json(raw)
+        if recovered and not _JP_CHARS.search(recovered["passage"]):
+            passage = _ensure_reading_paragraphs(recovered["passage"], para_count)
+            passage_ja = recovered["passage_ja"]
+            if not passage_ja or _looks_untranslated(passage, passage_ja):
+                passage_ja = _ensure_reply_ja(passage, "")
+            return {"online": True, "title": recovered["title"] or topic_txt.title(),
+                    "passage": passage, "passage_ja": passage_ja, "note": ""}
         cleaned = _plain_text(raw)
-        if cleaned and not _JP_CHARS.search(cleaned):
+        if cleaned and not _JP_CHARS.search(cleaned) and not _looks_like_json(cleaned):
             cleaned = _ensure_reading_paragraphs(cleaned, para_count)
             return {"online": True, "title": topic_txt.title(), "passage": cleaned,
                     "passage_ja": _ensure_reply_ja(cleaned, ""), "note": ""}
@@ -2267,8 +2685,16 @@ def generate_reading_passage_stream(topic: str = "", level: str = "beginner",
                 return {"online": True,
                         "title": str(parsed.get("title", "")).strip(),
                         "passage": passage, "passage_ja": passage_ja, "note": ""}
+        recovered = _recover_passage_json(raw)
+        if recovered and not _JP_CHARS.search(recovered["passage"]):
+            passage = _ensure_reading_paragraphs(recovered["passage"], para_count)
+            passage_ja = recovered["passage_ja"]
+            if not passage_ja or _looks_untranslated(passage, passage_ja):
+                passage_ja = _ensure_reply_ja(passage, "")
+            return {"online": True, "title": recovered["title"] or topic_txt.title(),
+                    "passage": passage, "passage_ja": passage_ja, "note": ""}
         cleaned = _plain_text(raw)
-        if cleaned and not _JP_CHARS.search(cleaned):
+        if cleaned and not _JP_CHARS.search(cleaned) and not _looks_like_json(cleaned):
             cleaned = _ensure_reading_paragraphs(cleaned, para_count)
             return {"online": True, "title": topic_txt.title(), "passage": cleaned,
                     "passage_ja": _ensure_reply_ja(cleaned, ""), "note": ""}
@@ -2276,7 +2702,7 @@ def generate_reading_passage_stream(topic: str = "", level: str = "beginner",
 
     return _stream_completion(
         [{"role": "system", "content": sys}, {"role": "user", "content": user}],
-        temperature=0.85, max_tokens=1200, json_mode=True,
+        temperature=0.85, max_tokens=2000, json_mode=True,
         finish=finish,
         fallback=lambda: generate_reading_passage(topic, level=level, length=length),
     )
@@ -2351,6 +2777,73 @@ def _fallback_reading_passage(topic: str, length: str = "long") -> dict[str, str
 # to analyse ONE sentence per call, returning a tiny JSON object. Any sentence
 # the model fails on falls back to the rule-based analyser individually, so a
 # single bad sentence never wrecks the whole passage.
+#
+# Reading analysis is gated to capable models only: small local models (a 2B
+# Foundry Local CPU model, say) mislabel sentence structure, leak English
+# labels, or stall on the JSON contract. Hosted providers are always allowed;
+# local providers must clear an estimated parameter-size threshold. When a model
+# does not qualify, the UI shows the rule-based simple analysis with a notice
+# pointing the learner at a high-capability LLM.
+
+# Hosted, high-capability providers — always allowed for reading analysis.
+_READING_HOSTED_PROVIDERS = ("chatgpt", "azure", "openai")
+
+
+def _estimate_model_params_b(model: str) -> float | None:
+    """Best-effort guess of a model's size in billions of parameters from its id.
+
+    Recognises common patterns such as ``-7b``, ``8x7b`` (mixture-of-experts, we
+    take the expert size), ``qwen3.5-2b-...``, ``70B``, ``1.5b``. Returns None
+    when the name carries no size hint, so the caller can decide a default.
+    """
+    name = (model or "").lower()
+    if not name:
+        return None
+    # Mixture-of-experts like "8x7b": treat the per-expert size as the capability
+    # proxy rather than the (much larger) total.
+    moe = re.search(r"(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*b\b", name)
+    if moe:
+        return float(moe.group(2))
+    sizes = [float(m) for m in re.findall(r"(\d+(?:\.\d+)?)\s*b\b", name)]
+    if sizes:
+        return max(sizes)
+    # "...-405b", "70b-instruct" without a word boundary before b are covered by
+    # the regex above; a bare million-scale "...-350m" is clearly below 1B.
+    if re.search(r"\d+\s*m\b", name):
+        return 0.3
+    return None
+
+
+def _reading_ai_gate() -> tuple[bool, str]:
+    """Decide whether the active model may run AI reading analysis.
+
+    Returns ``(allowed, reason)``. ``reason`` is a learner-facing Japanese notice
+    used when analysis is NOT allowed, so the UI can explain why it fell back to
+    the simple rule-based analysis.
+    """
+    if config.READING_DISABLE_AI:
+        return False, "AI解析は無効化されています。簡易解析を表示しています。"
+    if config.READING_FORCE_AI:
+        return True, ""
+    provider = eff_ai_provider()
+    if provider in _READING_HOSTED_PROVIDERS:
+        return True, ""
+    # Local providers (foundry/ollama): require a capable-sized model. Use the
+    # model the analyser will actually call (translate model, else chat model).
+    model = (_translate_model or _model or eff_translate_model()
+             or eff_chat_model() or "")
+    size = _estimate_model_params_b(model)
+    threshold = config.READING_MIN_LOCAL_PARAMS_B
+    if size is not None and size >= threshold:
+        return True, ""
+    note = (
+        "長文読解のAI解析は高機能なLLM向けに最適化されています。"
+        f"現在のローカルモデル（{model or '不明'}）では精度が安定しないため、"
+        "簡易解析を表示しています。設定画面でChatGPTなどの高機能LLM、または"
+        f"{threshold:g}B以上のローカルモデルを選ぶとAI解析が有効になります。"
+    )
+    return False, note
+
 
 def _reading_sentence_sys(level: str) -> str:
     return (
@@ -2378,6 +2871,10 @@ def _reading_sentence_sys(level: str) -> str:
         "\"signals\":[{\"key\":\"contrast\",\"label\":\"対比\",\"match\":\"However\"}]}. "
         "Rules: copy the sentence exactly into text, in English. "
         "Chunk text and signal match must be copied exactly from the sentence, without adding words. "
+        "The chunk \"kind\" MUST be exactly one of the English keywords connector/subject/verb/object/complement/modifier "
+        "(never grammar phrases like 'linking verb' or 'direct object'). "
+        "The \"label\", \"focus\", and signal \"label\" MUST be Japanese, exactly as in the example (接続語/S 主語/V 動詞/O 目的語/C 補語/修飾句). "
+        "The \"pattern\" MUST be one of SV/SVC/SVO/SVOO/SVOC followed by the Japanese note in parentheses, e.g. 'SVC（主語＋動詞＋補語）'; never add an English gloss. "
         "Separate sentence-opening connectors such as However/Therefore/For example from the subject. "
         "Treat verb phrases such as 'does not help', 'can be seen', and 'has been changing' as one V chunk. "
         "Put prepositional/adverbial phrases such as 'in the same way' in modifier chunks."
@@ -2396,6 +2893,42 @@ def _reading_paragraph_units(text: str) -> list[list[str]]:
         if sentences:
             units.append(sentences)
     return units
+
+
+_READING_DEBUG_REASONS = {
+    "no_response": "モデルが応答しませんでした（接続不可/タイムアウト）",
+    "empty_response": "接続は成功したがモデルが空の応答を返しました（小型モデルがJSONモードで本文を返さない等）",
+    "invalid_json": "JSONとして解析できませんでした",
+    "validation_failed": "JSONは取得できたが検証に通りませんでした（原文不一致/日本語混入/プレースホルダ等）",
+    "exception": "解析中に例外が発生しました",
+}
+
+
+def _reading_debug_log(pi: int, si: int, sentence: str, reason: str, raw: Any) -> None:
+    """Record a sentence that fell back to the simple analysis, and why.
+
+    Written to ``DATA_DIR/reading_debug.log`` only when ``VIVE_READING_DEBUG`` is
+    on, so the default run produces no extra I/O. Best-effort: never let logging
+    break the analysis itself.
+    """
+    if not config.READING_DEBUG:
+        return
+    try:
+        label = _READING_DEBUG_REASONS.get(reason, reason)
+        snippet = str(raw or "")
+        if len(snippet) > 1000:
+            snippet = snippet[:1000] + "…(truncated)"
+        # For these the detail is the failure cause/status note, not raw output.
+        detail_label = "cause" if reason in ("no_response", "empty_response", "exception") else "raw"
+        line = (
+            f"--- paragraph {pi} sentence {si} | {reason} ({label})\n"
+            f"sentence: {sentence}\n"
+            f"{detail_label}: {snippet}\n\n"
+        )
+        with open(config.DATA_DIR / "reading_debug.log", "a", encoding="utf-8") as fh:
+            fh.write(line)
+    except Exception:
+        pass
 
 
 def _reading_note(any_usable: bool, any_fallback: bool) -> str:
@@ -2439,6 +2972,17 @@ def _analyze_reading_sentence(sentence: str, level: str, pi: int, si: int) -> tu
             item = _clean_reading_sentence(parsed, sentence)
             if item:
                 return item, True, True
+            _reading_debug_log(pi, si, sentence, "validation_failed", raw)
+        else:
+            _reading_debug_log(pi, si, sentence, "invalid_json", raw)
+    else:
+        # _chat() stashes the cause in _status["note"]: "call failed: ..." for a
+        # real exception, or "empty response ..." when the model returned no
+        # body. Tag the log accordingly so a timeout is never confused with an
+        # empty JSON-mode reply (the common small-model failure here).
+        note = _status.get("note") or ""
+        kind = "empty_response" if note.startswith("empty response") else "no_response"
+        _reading_debug_log(pi, si, sentence, kind, note)
     return _fallback_sentence_analysis(sentence, pi, si), False, responded
 
 
@@ -2455,6 +2999,14 @@ def analyze_reading_text(text: str, level: str = "beginner") -> dict[str, Any]:
     units = _reading_paragraph_units(text)
     if not units:
         return {"online": False, "analysis": None, "note": "解析する英文を入力してください。"}
+
+    # Reading analysis is reserved for capable models; small local models fall
+    # back to the rule-based simple analysis with a notice.
+    allowed, gate_note = _reading_ai_gate()
+    if not allowed:
+        fallback = _fallback_reading_analysis(text, gate_note)
+        return {"online": False, "restricted": True, "analysis": fallback,
+                "note": gate_note}
 
     paragraphs = []
     all_signals = []
@@ -2504,6 +3056,13 @@ def analyze_reading_text_stream(text: str, level: str = "beginner"):
     def gen():
         yield _stream_event("start", status=status())
         units = _reading_paragraph_units(text)
+        # Gate AI analysis to capable models; otherwise emit the simple analysis.
+        allowed, gate_note = _reading_ai_gate()
+        if not allowed:
+            fallback = _fallback_reading_analysis(text, gate_note)
+            yield _stream_event("final", result={"online": False, "restricted": True,
+                                                  "analysis": fallback, "note": gate_note})
+            return
         total_sentences = sum(len(s) for s in units)
         paragraphs = []
         all_signals = []
@@ -2518,6 +3077,7 @@ def analyze_reading_text_stream(text: str, level: str = "beginner"):
                 try:
                     item, usable, responded = _analyze_reading_sentence(sentence, level, pi, si)
                 except Exception as exc:
+                    _reading_debug_log(pi, si, sentence, "exception", repr(exc))
                     yield _stream_event("error", note=f"文の解析に失敗しました: {exc}")
                     item, usable, responded = _fallback_sentence_analysis(sentence, pi, si), False, False
                 any_usable = any_usable or usable
@@ -2559,8 +3119,14 @@ def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
     if not isinstance(sent, dict):
         return None
     stext = _norm_text(str(sent.get("text", "")))
+    # We analyse one sentence at a time, so ``source`` is that exact sentence.
+    # If the model paraphrased it (or echoed a placeholder), trust the original
+    # sentence rather than discarding the whole analysis — the chunks/signals
+    # below are still validated against this canonical text.
     if (not stext or _bad_reading_value(stext) or _JP_CHARS.search(stext)
             or not _copied_from(stext, source)):
+        stext = _norm_text(source)
+    if not stext:
         return None
     chunks = []
     for ch in sent.get("chunks") or []:
@@ -2570,24 +3136,26 @@ def _clean_reading_sentence(sent: Any, source: str) -> dict[str, Any] | None:
         if (not ctext or _bad_reading_value(ctext) or _JP_CHARS.search(ctext)
                 or not _copied_from(ctext, stext)):
             continue
-        kind = str(ch.get("kind", "")).strip().lower()
-        if kind not in {"connector", "subject", "verb", "object", "complement", "modifier"}:
-            kind = "modifier"
+        kind = _canonical_chunk_kind(str(ch.get("kind", "")))
+        # The model often labels chunks in English ("subject", "linking verb").
+        # Always derive the displayed label from the canonical kind so the UI
+        # shows the Japanese label, ignoring whatever the model sent.
         chunks.append({
             "kind": kind,
-            "label": str(ch.get("label", "")).strip() or _chunk_label(kind),
+            "label": _chunk_label(kind),
             "text": ctext,
         })
-    pattern = str(sent.get("pattern", "")).strip()
-    if _bad_reading_value(pattern):
-        pattern = "文型不明"
+    pattern = _canonical_reading_pattern(str(sent.get("pattern", "")))
     focus = str(sent.get("focus", "")).strip()
-    if _bad_reading_value(focus):
+    if _bad_reading_value(focus) or not _JP_CHARS.search(focus):
         focus = "詳細"
-    signals = _clean_reading_signals(sent.get("signals") or [], context=stext)
+    signals = _merge_reading_signals(
+        _clean_reading_signals(sent.get("signals") or [], context=stext),
+        _fallback_reading_signals(stext),
+    )
     return {
         "text": stext,
-        "pattern": pattern or "文型不明",
+        "pattern": pattern,
         "focus": focus or "詳細",
         "chunks": chunks,
         "signals": signals,
@@ -2608,9 +3176,14 @@ def _clean_reading_signals(items: list[Any], context: str = "") -> list[dict[str
         key = str(item.get("key", "")).strip().lower()
         if key not in allowed:
             key = "reference"
+        label = str(item.get("label", "")).strip()
+        # Keep a Japanese label; if the model returned English (or nothing),
+        # fall back to the canonical Japanese label for the key.
+        if not label or not _JP_CHARS.search(label):
+            label = _READING_SIGNAL_LABELS.get(key, _READING_SIGNAL_LABELS["reference"])
         clean.append({
             "key": key,
-            "label": str(item.get("label", "")).strip() or key,
+            "label": label,
             "match": match,
         })
     return clean
@@ -2652,6 +3225,141 @@ def _chunk_label(kind: str) -> str:
     }.get(kind, "修飾句")
 
 
+_READING_CHUNK_KINDS = {"connector", "subject", "verb", "object", "complement", "modifier"}
+
+
+def _canonical_chunk_kind(raw: str) -> str:
+    """Map a model-supplied chunk kind to one of the six canonical kinds.
+
+    Small models often ignore the contract and answer with grammatical English
+    such as ``linking verb``, ``direct object`` or ``subject complement``. We
+    fold those onto the canonical kind so the Japanese label is always derived
+    correctly. Order matters: ``subject complement`` must resolve to complement,
+    not subject, so the more specific terms are checked first.
+    """
+    k = _norm_text(raw).lower()
+    if k in _READING_CHUNK_KINDS:
+        return k
+    if not k:
+        return "modifier"
+    if "connect" in k or "conjunction" in k or "transition" in k:
+        return "connector"
+    if "complement" in k:
+        return "complement"
+    if "object" in k:
+        return "object"
+    if "subject" in k:
+        return "subject"
+    if "verb" in k or "predicate" in k:
+        return "verb"
+    return "modifier"
+
+
+_READING_PATTERN_LABELS = {
+    "SV": "SV（主語＋動詞）",
+    "SVC": "SVC（主語＋動詞＋補語）",
+    "SVO": "SVO（主語＋動詞＋目的語）",
+    "SVOO": "SVOO（主語＋動詞＋目的語＋目的語）",
+    "SVOC": "SVOC（主語＋動詞＋目的語＋補語）",
+}
+
+
+def _canonical_reading_pattern(raw: str) -> str:
+    """Normalise a sentence-pattern label to its canonical Japanese form.
+
+    Models frequently answer with English glosses like
+    ``SVC (subject + linking verb + complement)``. We pull the SV/SVC/SVO/SVOO/
+    SVOC token out and relabel it in Japanese so the UI never shows English.
+    """
+    text = _norm_text(raw)
+    if not text or _bad_reading_value(text):
+        return "文型不明"
+    compact = re.sub(r"[^A-Za-z]", "", text).upper()
+    m = re.match(r"(SVOO|SVOC|SVO|SVC|SV)", compact)
+    if m:
+        return _READING_PATTERN_LABELS[m.group(1)]
+    if _JP_CHARS.search(text):
+        return text  # already a Japanese description — keep it as-is
+    return "文型不明"
+
+
+_READING_SIGNAL_LABELS = {
+    "contrast": "対比",
+    "reason": "理由",
+    "cause": "原因",
+    "result": "結果",
+    "conclusion": "結論",
+    "example": "具体例",
+    "addition": "追加",
+    "sequence": "順序",
+    "reference": "指示",
+}
+
+
+_READING_SIGNAL_PHRASES = [
+    ("contrast", "however"), ("contrast", "although"), ("contrast", "but"),
+    ("contrast", "yet"), ("contrast", "while"), ("contrast", "whereas"),
+    ("contrast", "on the other hand"),
+    ("reason", "because"), ("reason", "since"), ("reason", "due to"),
+    ("reason", "for this reason"),
+    ("cause", "cause"), ("cause", "causes"), ("cause", "lead to"),
+    ("cause", "leads to"), ("cause", "result in"), ("cause", "results in"),
+    ("result", "therefore"), ("result", "so"), ("result", "as a result"),
+    ("result", "consequently"), ("result", "thus"),
+    ("conclusion", "in conclusion"), ("conclusion", "overall"),
+    ("conclusion", "in short"), ("conclusion", "to sum up"),
+    ("conclusion", "finally"),
+    ("example", "for example"), ("example", "for instance"),
+    ("example", "such as"),
+    ("addition", "also"), ("addition", "moreover"),
+    ("addition", "in addition"), ("addition", "furthermore"),
+    ("sequence", "first"), ("sequence", "second"), ("sequence", "next"),
+    ("sequence", "then"), ("sequence", "before"), ("sequence", "after"),
+    ("reference", "this"), ("reference", "that"), ("reference", "these"),
+    ("reference", "those"), ("reference", "it"), ("reference", "they"),
+    ("reference", "them"), ("reference", "their"),
+]
+
+
+def _fallback_reading_signals(text: str) -> list[dict[str, str]]:
+    hits: list[tuple[int, dict[str, str]]] = []
+    seen: set[tuple[str, str]] = set()
+    for key, phrase in _READING_SIGNAL_PHRASES:
+        pattern = re.escape(phrase).replace(r"\ ", r"\s+")
+        for m in re.finditer(r"\b" + pattern + r"\b", text, flags=re.IGNORECASE):
+            match = _norm_text(m.group(0))
+            sig_key = (key, match.lower())
+            if sig_key in seen:
+                continue
+            seen.add(sig_key)
+            hits.append((m.start(), {
+                "key": key,
+                "label": _READING_SIGNAL_LABELS.get(key, _READING_SIGNAL_LABELS["reference"]),
+                "match": match,
+            }))
+    return [item for _, item in sorted(hits, key=lambda x: x[0])]
+
+
+def _merge_reading_signals(*groups: list[dict[str, str]]) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group in groups:
+        for sig in group or []:
+            key = str(sig.get("key") or "reference")
+            match = _norm_text(str(sig.get("match") or ""))
+            if not match:
+                continue
+            sig_key = (key, match.lower())
+            if sig_key in seen:
+                continue
+            seen.add(sig_key)
+            label = str(sig.get("label") or "").strip()
+            if not label or not _JP_CHARS.search(label):
+                label = _READING_SIGNAL_LABELS.get(key, _READING_SIGNAL_LABELS["reference"])
+            merged.append({"key": key, "label": label, "match": match})
+    return merged
+
+
 def _fallback_reading_analysis(text: str, note: str) -> dict[str, Any]:
     paragraphs = []
     all_signals = []
@@ -2674,12 +3382,54 @@ def _fallback_reading_analysis(text: str, note: str) -> dict[str, Any]:
     return {"paragraphs": paragraphs, "signals": all_signals, "note": note}
 
 
+# Common English abbreviations that end in a period but do NOT end a sentence.
+# Used so "Mr. Sato ..." is kept as one sentence instead of being split at "Mr.".
+_SENTENCE_ABBREV = {
+    "mr", "mrs", "ms", "dr", "prof", "st", "mt", "sr", "jr", "messrs",
+    "vs", "etc", "inc", "ltd", "co", "no", "approx", "dept", "fig",
+    "e.g", "i.e", "a.m", "p.m", "u.s", "u.k",
+}
+
+
 def _reading_sentence_split(text: str) -> list[str]:
-    return [s.strip() for s in re.findall(r"[^.!?]+(?:[.!?]+|$)", text) if s.strip()]
+    """Split a passage into sentences, keeping abbreviations like 'Mr.' intact.
+
+    A bare ``.`` is treated as a sentence end EXCEPT when it follows a known
+    abbreviation (Mr./Ms./Dr./e.g. …), a single-letter initial (e.g. "J."), or
+    sits between two digits (a decimal like "3.5"). ``!`` and ``?`` always end a
+    sentence. This stops single fragments such as "Mr." from being sent to the
+    analyser, which would fail validation and trigger the simple-analysis notice.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    sentences: list[str] = []
+    start = 0
+    for m in re.finditer(r"[.!?]+", text):
+        if m.group(0) == ".":
+            prefix = text[start:m.start()]
+            last = re.search(r"([A-Za-z][A-Za-z.]*)$", prefix)
+            if last:
+                token = last.group(1).lower().rstrip(".")
+                if token in _SENTENCE_ABBREV or (len(token) == 1 and token.isalpha()):
+                    continue
+            before = text[m.start() - 1] if m.start() > 0 else ""
+            after = text[m.end()] if m.end() < len(text) else ""
+            if before.isdigit() and after.isdigit():
+                continue  # decimal point inside a number
+        chunk = text[start:m.end()].strip()
+        if chunk:
+            sentences.append(chunk)
+        start = m.end()
+    tail = text[start:].strip()
+    if tail:
+        sentences.append(tail)
+    return sentences
 
 
 _FB_CONNECTORS = {
     "however": ("contrast", "対比"),
+    "but": ("contrast", "対比"),
     "therefore": ("result", "結果"),
     "so": ("result", "結果"),
     "because": ("reason", "理由"),
@@ -2708,13 +3458,16 @@ _FB_LINKING = {"feel", "feels", "felt", "is", "are", "was", "were", "am",
 def _fallback_sentence_analysis(sentence: str, pi: int, si: int) -> dict[str, Any]:
     words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?|\d+", sentence)
     lower = [w.lower() for w in words]
-    signals = []
+    signals = _fallback_reading_signals(sentence)
     chunks = []
     start = 0
     if lower and lower[0] in _FB_CONNECTORS:
         key, label = _FB_CONNECTORS[lower[0]]
         chunks.append({"kind": "connector", "label": "接続語", "text": words[0]})
-        signals.append({"key": key, "label": label, "match": words[0]})
+        signals = _merge_reading_signals(
+            [{"key": key, "label": label, "match": words[0]}],
+            signals,
+        )
         start = 1
     verb_start, verb_end = _fallback_find_verb(lower, start)
     if verb_start < 0:
@@ -3127,6 +3880,64 @@ def _safe_json(text: str) -> dict | None:
         except Exception:
             return None
     return None
+
+
+def _looks_like_json(text: str) -> bool:
+    """True when a string is (the start of) a JSON object/array dump.
+
+    Guards the plain-text fallback so a truncated JSON blob that we could not
+    recover is never shown to the learner as the passage itself.
+    """
+    t = (text or "").lstrip()
+    if t[:1] in ("{", "["):
+        return True
+    # A bare ``"passage": "..."`` fragment without the opening brace.
+    return bool(re.match(r'"\w+"\s*:', t))
+
+
+def _json_string_field(raw: str, field: str) -> str:
+    """Extract one JSON string field's value, tolerating truncated/invalid JSON.
+
+    Walks the characters after ``"field":"`` and unescapes them until the
+    closing quote — or the end of the input, when the model's output was cut off
+    mid-string. This lets a passage whose JSON was truncated (e.g. a hosted /
+    reasoning model that exhausted the token budget) still be recovered instead
+    of being shown to the learner as raw JSON.
+    """
+    if not raw:
+        return ""
+    m = re.search(r'"' + re.escape(field) + r'"\s*:\s*"', raw)
+    if not m:
+        return ""
+    esc = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+    out: list[str] = []
+    i, n = m.end(), len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\" and i + 1 < n:
+            out.append(esc.get(raw[i + 1], raw[i + 1]))
+            i += 2
+            continue
+        if c == '"':
+            break
+        out.append(c)
+        i += 1
+    return "".join(out).strip()
+
+
+def _recover_passage_json(raw: str) -> dict | None:
+    """Recover reading-passage fields from truncated/invalid JSON.
+
+    When :func:`_safe_json` fails (most often because the JSON object was cut
+    off mid-string), pull the string fields out directly so callers never fall
+    back to dumping the raw JSON braces into the reading screen.
+    """
+    passage = _json_string_field(raw, "passage")
+    if not passage:
+        return None
+    return {"title": _json_string_field(raw, "title"),
+            "passage": passage,
+            "passage_ja": _json_string_field(raw, "passage_ja")}
 
 
 def _plain_text(raw: str) -> str:

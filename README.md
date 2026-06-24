@@ -7,7 +7,7 @@
 **内容に不正確さを含む場合があるため参考程度にご覧ください。**
 
 > 設計思想：英語を話せるようになるための3本柱（① 基礎 ② インプット ③ アウトプット）を各レッスンに落とし込む。
-> AI機能（翻訳・対話相手・発話チェック）は **Microsoft Foundry Local** を既定にしつつ、設定画面から **Ollama** や OpenAI互換エンドポイントにも切り替えられます。
+> AI機能（翻訳・対話相手・発話チェック）は **Microsoft Foundry Local** を既定にしつつ、設定画面から **Ollama**・**OpenAI (ChatGPT)**・**Azure OpenAI**・任意のOpenAI互換エンドポイントにも切り替えられます。
 
 ---
 
@@ -66,15 +66,34 @@ python run.py        # http://localhost:8000 が開きます
 Foundry Local が無くても、語彙・本文・音読（ブラウザ音声合成）・クイズ・進捗など利用可能です。
 AI機能（翻訳/対話/発話チェック）は接続時に自動で有効になります。
 
-### 2. AI（Foundry Local / Ollama）を有効にする
+### 2. AI（Foundry Local / Ollama / OpenAI / Azure OpenAI）を有効にする
 
 設定画面の **AI接続** で、会話・翻訳・採点に使うプロバイダーを選べます。
 
 - **Foundry Local**: 既定。アプリが空きポートで起動・検出し、モデルのダウンロード・削除管理もできます。
 - **Ollama**: `ollama serve` などで起動済みの Ollama に接続します。既定URLは `http://localhost:11434/v1` です。
+- **OpenAI (ChatGPT)**: OpenAI公式API（`api.openai.com`）に接続します。会話モデルに `gpt-4o-mini` などを指定します。
+- **Azure OpenAI**: Azure 上にデプロイした OpenAI モデルに接続します。エンドポイント・APIバージョン・デプロイ名を指定します。
 - **OpenAI互換URL**: `/v1/chat/completions` と `/v1/models` を持つ任意の互換APIに接続できます。
 
-Ollama の例:
+#### APIキーの扱い（OpenAI / Azure OpenAI）
+
+OpenAI (ChatGPT) と Azure OpenAI では、**APIキーそのものはアプリに保存しません**。
+設定画面では「APIキーを保持する**環境変数名**」を入力し、実際のキーは起動時にその環境変数から読み取ります。
+
+```bash
+# 例: OpenAI (ChatGPT)
+export OPENAI_API_KEY="sk-..."        # macOS / Linux
+setx OPENAI_API_KEY "sk-..."          # Windows（新しいシェルから有効）
+
+# 例: Azure OpenAI
+export AZURE_OPENAI_API_KEY="..."
+```
+
+環境変数を設定したうえでアプリを起動し、設定画面でプロバイダーと環境変数名（既定: `OPENAI_API_KEY` / `AZURE_OPENAI_API_KEY`）を保存してください。
+Azure の場合は併せて、エンドポイント（例: `https://<resource>.openai.azure.com`）・APIバージョン（例: `2024-10-21`）・**デプロイ名**（会話モデル欄に入力）を指定します。
+
+#### Ollama の例
 
 ```bash
 ollama pull qwen2.5:3b
@@ -113,10 +132,19 @@ Foundry Local をそのポートで立ち上げて自動接続します。右上
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `VIVE_AI_PROVIDER` | `foundry` | 会話・翻訳・採点の接続先。`foundry` / `ollama` / `openai` |
+| `VIVE_AI_PROVIDER` | `foundry` | 会話・翻訳・採点の接続先。`foundry` / `ollama` / `openai` / `chatgpt` / `azure` |
 | `VIVE_AI_BASE_URL` | （未設定） | OllamaやOpenAI互換URLの接続先。例: `http://localhost:11434/v1` |
 | `VIVE_AI_API_KEY` | `notneeded` | OpenAI互換URLでAPIキーが必要な場合に指定 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama選択時の既定URL |
+| `VIVE_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI (ChatGPT) の接続先 |
+| `VIVE_OPENAI_API_KEY_ENV` | `OPENAI_API_KEY` | OpenAIのAPIキーを保持する環境変数の**名前**（既定の環境変数名） |
+| `VIVE_OPENAI_CHAT_MODEL` | `gpt-4o-mini` | OpenAI (ChatGPT) の既定会話モデル |
+| `VIVE_AZURE_OPENAI_ENDPOINT` | （未設定） | Azure OpenAI のエンドポイント。例: `https://<resource>.openai.azure.com` |
+| `VIVE_AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure OpenAI のAPIバージョン |
+| `VIVE_AZURE_OPENAI_API_KEY_ENV` | `AZURE_OPENAI_API_KEY` | AzureのAPIキーを保持する環境変数の**名前**（既定の環境変数名） |
+| `VIVE_AZURE_OPENAI_DEPLOYMENT` | （未設定） | Azure OpenAI の既定デプロイ名（会話モデル） |
+| `OPENAI_API_KEY` | （未設定） | OpenAIのAPIキー本体。`VIVE_OPENAI_API_KEY_ENV` で名前を変更可 |
+| `AZURE_OPENAI_API_KEY` | （未設定） | AzureのAPIキー本体。`VIVE_AZURE_OPENAI_API_KEY_ENV` で名前を変更可 |
 | `VIVE_MANAGE_FOUNDRY` | `1` | アプリが空きポートで Foundry Local を起動する。`0`で無効化 |
 | `VIVE_FOUNDRY_PORT` | 自動 | 使うポートを固定したいとき指定 |
 | `VIVE_FOUNDRY_HOST` | `127.0.0.1` | バインド先ホスト |
@@ -124,6 +152,10 @@ Foundry Local をそのポートで立ち上げて自動接続します。右上
 | `VIVE_CHAT_MODEL` | `qwen3.5-2b-text-generic-cpu` | 翻訳・対話・採点に使うモデル（`foundry model list`で確認） |
 | `VIVE_TRANSLATE_MODEL` | （未設定） | 和訳・添削だけ別モデルにしたいとき指定。未設定なら `VIVE_CHAT_MODEL` を使う |
 | `VIVE_TRANSCRIBE_MODEL` | `whisper-base` | 発話チェックの音声認識(STT)モデル。Whisper系を推奨（`whisper-tiny`/`small`等も可） |
+| `VIVE_READING_MIN_PARAMS_B` | `7` | 長文読解のAI解析を許可するローカルモデルの最小規模（十億パラメータ）。これ未満の Foundry/Ollama モデルは簡易解析になる |
+| `VIVE_READING_FORCE_AI` | `0` | `1`で長文読解のAI解析を常に有効化（モデル名にサイズが出ない高性能ローカルモデル向け） |
+| `VIVE_READING_DISABLE_AI` | `0` | `1`で長文読解のAI解析を常に無効化（必ず簡易解析を使う） |
+| `VIVE_READING_DEBUG` | `0` | `1`で、簡易解析に落ちた文とその理由を `data/reading_debug.log` に記録（「一部の文はAI解析が崩れた」原因の切り分け用） |
 | `FOUNDRY_BASE_URL` | （未設定） | 外部で起動済みの Foundry Local に**手動接続**したいとき（指定すると自動起動より優先） |
 
 外部管理のサービスに繋ぐ場合のみ、`foundry service status` でURLを確認し
@@ -153,6 +185,17 @@ export VIVE_CHAT_MODEL=qwen3.5-2b-text-generic-cpu
 
 万一 text 非対応のモデルしか見つからない場合、「AI」状態に警告メッセージが表示されます。
 
+**長文読解のAI解析について（モデル要件）**
+
+長文読解の文構造解析（主語・動詞・5文型・段落役割など）は、文ごとに厳密なJSONを返す高度なタスクです。
+2B程度の小型ローカルモデルでは構造の誤判定や英語ラベルの混入が起きやすいため、**高機能なLLM向けに最適化**しています。
+
+- ChatGPT / Azure OpenAI / OpenAI互換（hosted）プロバイダーでは常にAI解析が有効です。
+- Foundry Local / Ollama では、モデル名から推定した規模が `VIVE_READING_MIN_PARAMS_B`（既定7B）以上のときだけAI解析が有効になります。
+- 条件を満たさない場合は、ルールベースの**簡易解析**を表示し、画面に高機能LLMの利用を促す案内を出します（他機能には影響しません）。
+- モデル名に規模表記（`-7b` など）が無い高性能ローカルモデルを使う場合は、`VIVE_READING_FORCE_AI=1` でAI解析を強制有効化できます。
+- 推論（reasoning）系モデル（o-series / gpt-5 系など）では、内部推論にトークンを使い切って本文が空で返ることがあります。ViveEnglish は空応答を検知するとトークン上限を自動的に引き上げて再試行します。それでも一部の文が簡易解析になる場合は、`VIVE_READING_DEBUG=1` で `data/reading_debug.log` を確認してください（`finish_reason=length` なら上限到達が原因）。
+
 ---
 
 ## 使い方（レッスンの流れ）
@@ -175,7 +218,7 @@ export VIVE_CHAT_MODEL=qwen3.5-2b-text-generic-cpu
 ViveEnglish/
 ├─ app/                  FastAPI バックエンド
 │  ├─ main.py            APIルート + 静的配信
-│  ├─ foundry.py         AIプロバイダー接続（Foundry/Ollama/OpenAI互換、オフライン耐性）
+│  ├─ foundry.py         AIプロバイダー接続（Foundry/Ollama/OpenAI/Azure/互換、オフライン耐性）
 │  ├─ database.py        SQLite（進捗・プロフィール・単語帳）
 │  ├─ content_store.py   レッスン/挿絵プロンプト読み込み
 │  ├─ config.py          設定（環境変数）
@@ -192,7 +235,7 @@ ViveEnglish/
 ```
 
 - バックエンド：FastAPI + uvicorn、永続化はSQLite（stdlibのみ）。
-- AI呼び出し：OpenAI互換クライアントで Foundry Local / Ollama / 任意の互換APIを叩く。未接続でも全体が壊れないフォールバック設計。
+- AI呼び出し：OpenAI互換クライアントで Foundry Local / Ollama / OpenAI (ChatGPT) / Azure OpenAI / 任意の互換APIを叩く。未接続でも全体が壊れないフォールバック設計。OpenAI/AzureのAPIキーは環境変数名で指定し、キー本体はアプリに保存しない。
 - フロント：ビルド不要の素のSPA。音読はブラウザの音声合成、録音は MediaRecorder→16kHz WAV変換でサーバ送信。
 
 ---

@@ -413,6 +413,7 @@ h2 { font-size: 1.25rem; margin: 1.6rem 0 .8rem; }
 
 .notice { background: #fff7f0; border: 1px solid #f3d9c4; color: #9a6a3f; padding: .7rem 1rem; border-radius: 10px; font-size: .88rem; margin: .8rem 0; }
 .notice.ok { background: #f0faf5; border-color: #cfe6dc; color: #2f6f4d; }
+.notice.warn { background: #fff8e6; border-color: #f0e0a8; color: #8a6d1f; }
 .notice code { background: #f1e7da; padding: .05rem .35rem; border-radius: 5px; font-size: .85em; }
 
 /* First-launch setup overlay */
